@@ -31,6 +31,7 @@ That workflow:
 - syncs `origin/main` from `upstream/main`
 - only allows fast-forward updates
 - fails instead of overwriting fork-only commits on `main`
+- if you protect `main`, allow the GitHub Actions bot to write or bypass; otherwise `sync-upstream` will fail
 
 Important: the workflow lives on `master`, but it updates `main`.
 
@@ -45,12 +46,14 @@ If needed, you can also trigger `sync-upstream` manually from the GitHub Actions
 ### 2. Bring upstream changes into `dev`
 
 ```bash
+git fetch origin main
 git checkout dev
 git pull origin dev
-git merge main
+git merge --ff-only origin/main
 ```
 
 Resolve conflicts in `dev`, not in `master`.
+This avoids merging a stale local `main` into `dev`.
 
 ### 3. Start new UI work from `dev`
 
@@ -86,7 +89,8 @@ git tag v2026.03.30-fork.1
 git push origin v2026.03.30-fork.1
 ```
 
-Only validated `master` commits should produce release assets.
+Only create release tags from validated `master` commits.
+The current release workflow still triggers on any `v*` tag, so this rule is enforced by maintainer discipline rather than workflow guards.
 
 ## Local Sync Commands
 
@@ -94,14 +98,13 @@ If you want to sync the local upstream mirror branch manually:
 
 ```bash
 git checkout main
-git pull
-git push
+git fetch upstream main
+git merge --ff-only upstream/main
+git push origin main
 ```
 
-This repository should be configured so that on `main`:
-
-- `git pull` pulls from `upstream/main`
-- `git push` pushes to `origin/main`
+These commands do not depend on extra branch-specific git configuration.
+If you want bare `git pull` to track `upstream/main`, you must configure `branch.main.remote` and `branch.main.merge` manually.
 
 ## Relationship To The Backend Repository
 
@@ -113,6 +116,7 @@ This repository should be configured so that on `main`:
 
 - Do not develop directly on `main`.
 - Do not use `master` for unfinished work.
-- Publish `management.html` releases only from `master`.
+- Create release tags only from validated `master` commits.
+- The release workflow still triggers on any `v*` tag, so this rule depends on maintainer discipline.
 - Keep `feature/*` branches short-lived.
 - Treat `master` as "validated frontend state", not "latest upstream state".

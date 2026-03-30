@@ -31,6 +31,7 @@
 - 把 `origin/main` 与 `upstream/main` 对齐
 - 只允许 fast-forward 更新
 - 如果 `main` 上存在 fork 专属提交，则直接失败，不会强制覆盖
+- 如果你对 `main` 启用了保护分支，需要允许 GitHub Actions bot 写入或 bypass；否则 `sync-upstream` 会失败
 
 注意：工作流文件放在 `master` 上，但它真正更新的是 `main`。
 
@@ -45,12 +46,14 @@
 ### 2. 把上游更新合并到 `dev`
 
 ```bash
+git fetch origin main
 git checkout dev
 git pull origin dev
-git merge main
+git merge --ff-only origin/main
 ```
 
 上游冲突统一在 `dev` 里解决，不要在 `master` 里处理。
+这样可以避免把本地过期的 `main` 合进 `dev`。
 
 ### 3. 从 `dev` 拉出前端功能分支
 
@@ -86,7 +89,8 @@ git tag v2026.03.30-fork.1
 git push origin v2026.03.30-fork.1
 ```
 
-只有 `master` 上的已验证提交才允许生成 `management.html` Release。
+仅从已验证的 `master` 提交打发布标签。
+当前发布工作流仍会对任何 `v*` 标签触发，因此这是一条维护约定，而不是工作流硬性保护。
 
 ## 本地手动同步命令
 
@@ -94,14 +98,13 @@ git push origin v2026.03.30-fork.1
 
 ```bash
 git checkout main
-git pull
-git push
+git fetch upstream main
+git merge --ff-only upstream/main
+git push origin main
 ```
 
-当前仓库应配置成在 `main` 分支上：
-
-- `git pull` 从 `upstream/main` 拉取
-- `git push` 推送到 `origin/main`
+这些命令不依赖额外的 branch-specific git 配置。
+如果你希望裸 `git pull` 直接跟踪 `upstream/main`，需要额外手动配置 `branch.main.remote` 与 `branch.main.merge`。
 
 ## 与后端仓库的关系
 
@@ -113,6 +116,7 @@ git push
 
 - 不要直接在 `main` 上开发
 - 不要把未完成工作直接放进 `master`
-- 只从 `master` 打面板发布标签
+- 只从已验证的 `master` 提交打发布标签
+- 当前发布工作流仍会对任何 `v*` 标签触发，因此这是一条维护约定
 - `feature/*` 分支尽量保持短生命周期
 - 把 `master` 理解为“已验证的前端稳定状态”，而不是“最新上游状态”
