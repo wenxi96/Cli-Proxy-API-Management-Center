@@ -153,6 +153,8 @@ npm run type-check # tsc --noEmit
 - UI 改动截图
 - 验证记录（`npm run lint`、`npm run type-check`）
 
+如果你维护的是自己的管理面板 fork，并希望同时保留上游镜像、稳定分支和开发分支，可参考 [docs/fork-maintainer-workflow_CN.md](docs/fork-maintainer-workflow_CN.md)。
+
 ## 许可证
 
 MIT

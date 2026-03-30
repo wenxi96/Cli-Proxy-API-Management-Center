@@ -154,6 +154,8 @@ Issues and PRs are welcome. Please include:
 - Screenshots for UI changes
 - Verification notes (`npm run lint`, `npm run type-check`)
 
+Fork maintainers who want to keep this UI fork aligned with upstream while publishing their own `management.html` releases can follow [docs/fork-maintainer-workflow.md](docs/fork-maintainer-workflow.md).
+
 ## License
 
 MIT
