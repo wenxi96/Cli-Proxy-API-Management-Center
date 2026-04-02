@@ -24,6 +24,7 @@ import { IconFilterAll } from '@/components/ui/icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { copyToClipboard } from '@/utils/clipboard';
+import { formatDateTime, formatNumber } from '@/utils/format';
 import {
   MAX_CARD_PAGE_SIZE,
   MIN_CARD_PAGE_SIZE,
@@ -40,10 +41,15 @@ import {
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { AuthFilesBatchCheckModal } from '@/features/authFiles/components/AuthFilesBatchCheckModal';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
+import {
+  buildBatchCheckLiveResponse,
+  useAuthFilesBatchCheck,
+} from '@/features/authFiles/hooks/useAuthFilesBatchCheck';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -59,6 +65,7 @@ import {
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import type { AuthFileBatchCheckAggregate, AuthFileBatchCheckSummary } from '@/types';
 import styles from './AuthFilesPage.module.scss';
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
@@ -67,9 +74,75 @@ const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
+const MIN_BATCH_CHECK_CONCURRENCY = 1;
+const MAX_BATCH_CHECK_CONCURRENCY = 12;
+const DEFAULT_BATCH_CHECK_CONCURRENCY = 6;
+const EMPTY_BATCH_CHECK_SUMMARY: AuthFileBatchCheckSummary = {
+  checked_count: 0,
+  available_count: 0,
+  available_provider_count: 0,
+  skipped_count: 0,
+  classification_counts: {},
+  bucket_counts: {},
+};
+const EMPTY_BATCH_CHECK_AGGREGATE: AuthFileBatchCheckAggregate = {
+  capacity_overview: {
+    remaining_total: 0,
+    total_capacity: 0,
+    remaining_percent: 0,
+    used_total: 0,
+    used_percent: 0,
+    equivalent_full_accounts: 0,
+    unknown_remaining_count: 0,
+  },
+  risk_overview: {
+    invalidated_401_count: 0,
+    no_quota_count: 0,
+    api_error_count: 0,
+    request_failed_count: 0,
+    exhausted_count: 0,
+    low_remaining_1_29_count: 0,
+    mid_low_remaining_1_49_count: 0,
+  },
+  health_buckets: {
+    full: 0,
+    very_high: 0,
+    high: 0,
+    usable: 0,
+    fair: 0,
+    alert: 0,
+    danger: 0,
+    exhausted: 0,
+    unknown: 0,
+  },
+  scope_overview: {
+    total_count: 0,
+    enabled_count: 0,
+    disabled_count: 0,
+    processed_count: 0,
+    skipped_count: 0,
+  },
+  refresh_overview: {
+    highlight_windows: [],
+    refresh_window_counts: {},
+  },
+  plan_distribution: {
+    plan_type_counts: {},
+    primary_cycle_counts: {},
+    secondary_cycle_counts: {},
+  },
+  diagnosis: [],
+  action_candidates: {
+    invalidated_401_names: [],
+    disable_exhausted_names: [],
+    reenable_names: [],
+    reenable_threshold_bucket: 'danger',
+  },
+};
+type BatchCheckScope = 'selected' | 'page' | 'filtered';
+type BatchCheckDirectAction = 'delete_invalidated_401' | 'disable_exhausted' | 'reenable_recovered';
 
-const escapeWildcardSearchSegment = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const buildWildcardSearch = (value: string): RegExp | null => {
   if (!value.includes('*')) return null;
@@ -77,9 +150,26 @@ const buildWildcardSearch = (value: string): RegExp | null => {
   return new RegExp(pattern, 'i');
 };
 
+const formatBatchCheckPercent = (value?: number | null): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  if (Number.isInteger(value)) return `${value}%`;
+  if (Math.abs(value) >= 10) return `${value.toFixed(1)}%`;
+  return `${value.toFixed(2)}%`;
+};
+
+const formatBatchCheckNumber = (value?: number | null): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  if (Number.isInteger(value)) return formatNumber(value);
+  return value.toFixed(2);
+};
+
+const clampBatchCheckConcurrency = (value: number) =>
+  Math.min(MAX_BATCH_CHECK_CONCURRENCY, Math.max(MIN_BATCH_CHECK_CONCURRENCY, Math.round(value)));
+
 export function AuthFilesPage() {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
+  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
@@ -100,6 +190,15 @@ export function AuthFilesPage() {
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const [batchCheckModalOpen, setBatchCheckModalOpen] = useState(false);
+  const [batchCheckFocusName, setBatchCheckFocusName] = useState('');
+  const [batchCheckScope, setBatchCheckScope] = useState<BatchCheckScope>('page');
+  const [batchCheckConcurrency, setBatchCheckConcurrency] = useState(DEFAULT_BATCH_CHECK_CONCURRENCY);
+  const [batchCheckConcurrencyInput, setBatchCheckConcurrencyInput] = useState(
+    String(DEFAULT_BATCH_CHECK_CONCURRENCY)
+  );
+  const [lastBatchCheckScope, setLastBatchCheckScope] = useState<BatchCheckScope>('page');
+  const [batchCheckActionPending, setBatchCheckActionPending] = useState<BatchCheckDirectAction | null>(null);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
@@ -131,6 +230,7 @@ export function AuthFilesPage() {
     deselectAll,
     batchDownload,
     batchSetStatus,
+    deleteFilesNow,
     batchDelete,
   } = useAuthFilesData({ refreshKeyStats });
 
@@ -152,6 +252,17 @@ export function AuthFilesPage() {
     handleRenameAlias,
     handleDeleteAlias,
   } = useAuthFilesOauth({ viewMode, files });
+
+  const {
+    checking: batchChecking,
+    batchCheckJob,
+    progress: batchCheckProgress,
+    batchCheckResponse,
+    resultsMap,
+    skippedMap,
+    lastRequestedNames,
+    runBatchCheck,
+  } = useAuthFilesBatchCheck();
 
   const {
     modelsModalOpen,
@@ -201,10 +312,7 @@ export function AuthFilesPage() {
       if (typeof persisted.problemOnly === 'boolean') {
         setProblemOnly(persisted.problemOnly);
       }
-      if (
-        typeof persistedCompactMode !== 'boolean' &&
-        typeof persisted.compactMode === 'boolean'
-      ) {
+      if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
       if (typeof persisted.search === 'string') {
@@ -220,17 +328,23 @@ export function AuthFilesPage() {
       const regularPageSize =
         typeof persisted.regularPageSize === 'number' && Number.isFinite(persisted.regularPageSize)
           ? clampCardPageSize(persisted.regularPageSize)
-          : legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE);
       const compactPageSize =
         typeof persisted.compactPageSize === 'number' && Number.isFinite(persisted.compactPageSize)
           ? clampCardPageSize(persisted.compactPageSize)
-          : legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE);
       setPageSizeByMode({
         regular: regularPageSize,
         compact: compactPageSize,
       });
       if (isAuthFilesSortMode(persisted.sortMode)) {
         setSortMode(persisted.sortMode);
+      }
+      if (
+        typeof persisted.batchCheckConcurrency === 'number' &&
+        Number.isFinite(persisted.batchCheckConcurrency)
+      ) {
+        setBatchCheckConcurrency(clampBatchCheckConcurrency(persisted.batchCheckConcurrency));
       }
     }
 
@@ -250,9 +364,11 @@ export function AuthFilesPage() {
       regularPageSize: pageSizeByMode.regular,
       compactPageSize: pageSizeByMode.compact,
       sortMode,
+      batchCheckConcurrency,
     });
     writePersistedAuthFilesCompactMode(compactMode);
   }, [
+    batchCheckConcurrency,
     compactMode,
     filter,
     page,
@@ -267,6 +383,10 @@ export function AuthFilesPage() {
   useEffect(() => {
     setPageSizeInput(String(pageSize));
   }, [pageSize]);
+
+  useEffect(() => {
+    setBatchCheckConcurrencyInput(String(batchCheckConcurrency));
+  }, [batchCheckConcurrency]);
 
   const setCurrentModePageSize = useCallback(
     (next: number) => {
@@ -432,10 +552,137 @@ export function AuthFilesPage() {
     [sorted]
   );
   const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
+  const batchCheckPageNames = useMemo(() => pageItems.map((file) => file.name), [pageItems]);
+  const batchCheckTargetNames = useMemo(() => {
+    switch (batchCheckScope) {
+      case 'selected':
+        return selectedNames;
+      case 'filtered':
+        return sorted.map((file) => file.name);
+      case 'page':
+      default:
+        return batchCheckPageNames;
+    }
+  }, [batchCheckPageNames, batchCheckScope, selectedNames, sorted]);
   const selectedHasStatusUpdating = useMemo(
     () => selectedNames.some((name) => statusUpdating[name] === true),
     [selectedNames, statusUpdating]
   );
+  const liveBatchCheckResponse = useMemo(
+    () => buildBatchCheckLiveResponse(batchCheckResponse, files),
+    [batchCheckResponse, files]
+  );
+  const batchCheckDisplaySummary = liveBatchCheckResponse?.summary ?? (batchCheckJob ? EMPTY_BATCH_CHECK_SUMMARY : null);
+  const batchCheckDisplayAggregate =
+    liveBatchCheckResponse?.aggregate ?? (batchCheckJob ? EMPTY_BATCH_CHECK_AGGREGATE : null);
+  const hasBatchCheckSnapshot = Boolean(batchCheckDisplaySummary && batchCheckDisplayAggregate);
+  const hasBatchCheckDisplayResults = Boolean(
+    liveBatchCheckResponse &&
+      ((liveBatchCheckResponse.results ?? []).length > 0 || (liveBatchCheckResponse.skipped ?? []).length > 0)
+  );
+  const batchCheckActionCandidates = batchCheckDisplayAggregate?.action_candidates ?? null;
+  const batchCheckHeroMetrics = useMemo(() => {
+    if (!batchCheckDisplaySummary || !batchCheckDisplayAggregate) return [];
+
+    return [
+      {
+        key: 'remaining',
+        label: t('auth_files.batch_check_total_remaining'),
+        value: `${formatNumber(batchCheckDisplayAggregate.capacity_overview.remaining_total)} / ${formatNumber(batchCheckDisplayAggregate.capacity_overview.total_capacity)}`,
+        hint: formatBatchCheckPercent(batchCheckDisplayAggregate.capacity_overview.remaining_percent),
+      },
+      {
+        key: 'equivalent',
+        label: t('auth_files.batch_check_equivalent_accounts'),
+        value: formatBatchCheckNumber(batchCheckDisplayAggregate.capacity_overview.equivalent_full_accounts),
+      },
+      {
+        key: 'available',
+        label: t('auth_files.batch_check_available_count'),
+        value: formatNumber(batchCheckDisplaySummary.available_count),
+      },
+      {
+        key: 'processed',
+        label: t('auth_files.batch_check_processed_count'),
+        value: formatNumber(batchCheckDisplayAggregate.scope_overview.processed_count),
+        hint: t('auth_files.batch_check_scope_count', { count: lastRequestedNames.length }),
+      },
+      {
+        key: 'enabled',
+        label: t('auth_files.batch_check_enabled_count'),
+        value: formatNumber(batchCheckDisplayAggregate.scope_overview.enabled_count),
+      },
+      {
+        key: 'disabled',
+        label: t('auth_files.batch_check_disabled_count'),
+        value: formatNumber(batchCheckDisplayAggregate.scope_overview.disabled_count),
+      },
+      {
+        key: 'invalidated',
+        label: t('auth_files.batch_check_invalidated_count'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.invalidated_401_count),
+      },
+      {
+        key: 'noQuota',
+        label: t('auth_files.batch_check_no_quota_count'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.no_quota_count),
+      },
+      {
+        key: 'apiError',
+        label: t('auth_files.batch_check_api_error_count'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.api_error_count),
+      },
+      {
+        key: 'requestFailed',
+        label: t('auth_files.batch_check_request_failed_count'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.request_failed_count),
+      },
+      {
+        key: 'low129',
+        label: t('auth_files.batch_check_low_remaining_1_29'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.low_remaining_1_29_count),
+      },
+      {
+        key: 'low149',
+        label: t('auth_files.batch_check_low_remaining_1_49'),
+        value: formatNumber(batchCheckDisplayAggregate.risk_overview.mid_low_remaining_1_49_count),
+      },
+    ];
+  }, [batchCheckDisplayAggregate, batchCheckDisplaySummary, lastRequestedNames.length, t]);
+  const batchCheckScopeOptions = useMemo(
+    () => [
+      {
+        value: 'selected',
+        label: t('auth_files.batch_check_scope_selected', {
+          count: selectedNames.length,
+        }),
+      },
+      {
+        value: 'page',
+        label: t('auth_files.batch_check_scope_page', {
+          count: batchCheckPageNames.length,
+        }),
+      },
+      {
+        value: 'filtered',
+        label: t('auth_files.batch_check_scope_filtered', {
+          count: sorted.length,
+        }),
+      },
+    ],
+    [batchCheckPageNames.length, selectedNames.length, sorted.length, t]
+  );
+  const lastBatchCheckScopeLabel = useMemo(() => {
+    switch (lastBatchCheckScope) {
+      case 'selected':
+        return t('auth_files.batch_check_scope_selected_short');
+      case 'filtered':
+        return t('auth_files.batch_check_scope_filtered_short');
+      case 'page':
+      default:
+        return t('auth_files.batch_check_scope_page_short');
+    }
+  }, [lastBatchCheckScope, t]);
   const batchStatusButtonsDisabled =
     disableControls ||
     selectedNames.length === 0 ||
@@ -484,6 +731,130 @@ export function AuthFilesPage() {
     },
     [filter, navigate]
   );
+
+  const handleRunBatchCheck = useCallback(async () => {
+    setLastBatchCheckScope(batchCheckScope);
+    await runBatchCheck(batchCheckTargetNames, {
+      includeDisabled: true,
+      concurrency: batchCheckConcurrency,
+    });
+  }, [batchCheckConcurrency, batchCheckScope, batchCheckTargetNames, runBatchCheck]);
+
+  const commitBatchCheckConcurrencyInput = useCallback(
+    (rawValue: string) => {
+      const trimmed = rawValue.trim();
+      if (!trimmed) {
+        setBatchCheckConcurrencyInput(String(batchCheckConcurrency));
+        return;
+      }
+
+      const value = Number(trimmed);
+      if (!Number.isFinite(value)) {
+        setBatchCheckConcurrencyInput(String(batchCheckConcurrency));
+        return;
+      }
+
+      const next = clampBatchCheckConcurrency(value);
+      setBatchCheckConcurrency(next);
+      setBatchCheckConcurrencyInput(String(next));
+    },
+    [batchCheckConcurrency]
+  );
+
+  const handleBatchCheckConcurrencyChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const rawValue = event.currentTarget.value;
+    setBatchCheckConcurrencyInput(rawValue);
+
+    const trimmed = rawValue.trim();
+    if (!trimmed) return;
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return;
+
+    const rounded = Math.round(parsed);
+    if (rounded < MIN_BATCH_CHECK_CONCURRENCY || rounded > MAX_BATCH_CHECK_CONCURRENCY) return;
+
+    setBatchCheckConcurrency(rounded);
+  }, []);
+
+  const handleOpenBatchCheckDetails = useCallback((name?: string) => {
+    setBatchCheckFocusName(name ?? '');
+    setBatchCheckModalOpen(true);
+  }, []);
+
+  const handleCloseBatchCheckDetails = useCallback(() => {
+    setBatchCheckModalOpen(false);
+    setBatchCheckFocusName('');
+  }, []);
+
+  const handleBatchCheckSummaryAction = useCallback(
+    (
+      action: BatchCheckDirectAction,
+      title: string,
+      message: string,
+      runner: () => Promise<unknown>,
+      variant: 'danger' | 'primary' | 'secondary' = 'danger'
+    ) => {
+      showConfirmation({
+        title,
+        message,
+        variant,
+        confirmText: t('common.confirm'),
+        onConfirm: async () => {
+          setBatchCheckActionPending(action);
+          try {
+            await runner();
+          } finally {
+            setBatchCheckActionPending((current) => (current === action ? null : current));
+          }
+        },
+      });
+    },
+    [showConfirmation, t]
+  );
+
+  const handleDeleteInvalidated401 = useCallback(() => {
+    const names = batchCheckActionCandidates?.invalidated_401_names ?? [];
+    if (names.length === 0) return;
+
+    handleBatchCheckSummaryAction(
+      'delete_invalidated_401',
+      t('auth_files.batch_check_action_delete_invalidated_401'),
+      t('auth_files.batch_check_confirm_delete_invalidated_401', { count: names.length }),
+      () => deleteFilesNow(names),
+      'danger'
+    );
+  }, [batchCheckActionCandidates, deleteFilesNow, handleBatchCheckSummaryAction, t]);
+
+  const handleDisableExhausted = useCallback(() => {
+    const names = batchCheckActionCandidates?.disable_exhausted_names ?? [];
+    if (names.length === 0) return;
+
+    handleBatchCheckSummaryAction(
+      'disable_exhausted',
+      t('auth_files.batch_check_action_disable_exhausted'),
+      t('auth_files.batch_check_confirm_disable_exhausted', { count: names.length }),
+      () => batchSetStatus(names, false),
+      'secondary'
+    );
+  }, [batchCheckActionCandidates, batchSetStatus, handleBatchCheckSummaryAction, t]);
+
+  const handleReenableRecovered = useCallback(() => {
+    const names = batchCheckActionCandidates?.reenable_names ?? [];
+    if (names.length === 0) return;
+
+    handleBatchCheckSummaryAction(
+      'reenable_recovered',
+      t('auth_files.batch_check_action_reenable_recovered'),
+      t('auth_files.batch_check_confirm_reenable_recovered', {
+        count: names.length,
+        bucket: t(
+          `auth_files.batch_check_bucket_${batchCheckActionCandidates?.reenable_threshold_bucket ?? 'danger'}`
+        ),
+      }),
+      () => batchSetStatus(names, true)
+    );
+  }, [batchCheckActionCandidates, batchSetStatus, handleBatchCheckSummaryAction, t]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
@@ -693,6 +1064,248 @@ export function AuthFilesPage() {
       >
         {error && <div className={styles.errorBox}>{error}</div>}
 
+        <div className={styles.batchCheckPanel}>
+          <div className={styles.batchCheckPanelHeader}>
+            <div className={styles.batchCheckPanelTitleWrap}>
+              <h2 className={styles.batchCheckPanelTitle}>{t('auth_files.batch_check_title')}</h2>
+              <p className={styles.batchCheckPanelDescription}>
+                {t('auth_files.batch_check_description')}
+              </p>
+            </div>
+            <div className={styles.batchCheckPanelActions}>
+              <div className={styles.batchCheckInlineControls}>
+                <div className={styles.batchCheckScopeControl}>
+                  <span className={styles.batchCheckScopeLabel}>
+                    {t('auth_files.batch_check_scope_label')}
+                  </span>
+                  <Select
+                    value={batchCheckScope}
+                    options={batchCheckScopeOptions}
+                    onChange={(value) => setBatchCheckScope(value as BatchCheckScope)}
+                    ariaLabel={t('auth_files.batch_check_scope_label')}
+                    disabled={disableControls || batchChecking}
+                  />
+                </div>
+                <div className={styles.batchCheckConcurrencyControl}>
+                  <span className={styles.batchCheckScopeLabel}>
+                    {t('auth_files.batch_check_concurrency_label')}
+                  </span>
+                  <input
+                    className={styles.batchCheckConcurrencyInput}
+                    type="number"
+                    min={MIN_BATCH_CHECK_CONCURRENCY}
+                    max={MAX_BATCH_CHECK_CONCURRENCY}
+                    step={1}
+                    value={batchCheckConcurrencyInput}
+                    onChange={handleBatchCheckConcurrencyChange}
+                    onBlur={(event) => commitBatchCheckConcurrencyInput(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    disabled={disableControls || batchChecking}
+                    aria-label={t('auth_files.batch_check_concurrency_label')}
+                  />
+                </div>
+                <Button
+                  className={styles.batchCheckStartButton}
+                  size="sm"
+                  onClick={() => void handleRunBatchCheck()}
+                  disabled={disableControls || batchCheckTargetNames.length === 0}
+                  loading={batchChecking}
+                >
+                  {t('auth_files.batch_check_button')}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {batchCheckJob && batchChecking && batchCheckProgress ? (
+            <div className={styles.batchCheckProgressSection}>
+              <div className={styles.batchCheckPanelMeta}>
+                <span>
+                  {t('auth_files.batch_check_scope_label')}: {lastBatchCheckScopeLabel}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_scope_count', {
+                    count: lastRequestedNames.length,
+                  })}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_concurrency_label')}: {batchCheckJob.scope.concurrency}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_progress_status', {
+                    status:
+                      batchCheckJob.status === 'pending'
+                        ? t('auth_files.batch_check_status_pending')
+                        : t('auth_files.batch_check_status_running'),
+                  })}
+                </span>
+              </div>
+              <div className={styles.batchCheckProgressHeader}>
+                <strong>{t('auth_files.batch_check_progress_title')}</strong>
+                <span>{batchCheckProgress.percent}%</span>
+              </div>
+              <div className={styles.batchCheckProgressBar}>
+                <div
+                  className={styles.batchCheckProgressBarFill}
+                  style={{ width: `${batchCheckProgress.percent}%` }}
+                />
+              </div>
+              <div className={styles.batchCheckSummaryGrid}>
+                <div className={styles.batchCheckSummaryCard}>
+                  <span className={styles.batchCheckSummaryLabel}>
+                    {t('auth_files.batch_check_progress_completed')}
+                  </span>
+                  <strong className={styles.batchCheckSummaryValue}>
+                    {batchCheckProgress.completed}/{batchCheckProgress.total}
+                  </strong>
+                </div>
+                <div className={styles.batchCheckSummaryCard}>
+                  <span className={styles.batchCheckSummaryLabel}>
+                    {t('auth_files.batch_check_progress_success')}
+                  </span>
+                  <strong className={styles.batchCheckSummaryValue}>
+                    {batchCheckProgress.success}
+                  </strong>
+                </div>
+                <div className={styles.batchCheckSummaryCard}>
+                  <span className={styles.batchCheckSummaryLabel}>
+                    {t('auth_files.batch_check_progress_failed')}
+                  </span>
+                  <strong className={styles.batchCheckSummaryValue}>
+                    {batchCheckProgress.failed}
+                  </strong>
+                </div>
+                <div className={styles.batchCheckSummaryCard}>
+                  <span className={styles.batchCheckSummaryLabel}>
+                    {t('auth_files.batch_check_skipped_count')}
+                  </span>
+                  <strong className={styles.batchCheckSummaryValue}>
+                    {batchCheckProgress.skipped}
+                  </strong>
+                </div>
+              </div>
+              <div className={styles.batchCheckProgressHint}>
+                {batchCheckProgress.current_name
+                  ? t('auth_files.batch_check_progress_current', {
+                      name: batchCheckProgress.current_name,
+                      provider:
+                        batchCheckProgress.current_provider ||
+                        t('auth_files.batch_check_classification_unknown'),
+                    })
+                  : t('auth_files.batch_check_progress_waiting')}
+              </div>
+            </div>
+          ) : null}
+
+          {hasBatchCheckSnapshot && batchCheckDisplaySummary && batchCheckDisplayAggregate ? (
+            <>
+              <div className={styles.batchCheckPanelMeta}>
+                <span>
+                  {t('auth_files.batch_check_last_checked')}:{' '}
+                  {liveBatchCheckResponse?.checked_at
+                    ? formatDateTime(liveBatchCheckResponse.checked_at)
+                    : t('common.not_set')}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_scope_label')}: {lastBatchCheckScopeLabel}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_scope_count', {
+                    count: lastRequestedNames.length,
+                  })}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_concurrency_label')}:{' '}
+                  {batchCheckJob?.scope.concurrency ?? batchCheckConcurrency}
+                </span>
+                <span>
+                  {t('auth_files.batch_check_next_refresh_at')}: {' '}
+                  {batchCheckDisplayAggregate.refresh_overview.next_refresh_at
+                    ? formatDateTime(batchCheckDisplayAggregate.refresh_overview.next_refresh_at)
+                    : t('common.not_set')}
+                </span>
+              </div>
+
+              <div className={styles.batchCheckHeroGrid}>
+                {batchCheckHeroMetrics.map((item) => (
+                  <div key={item.key} className={styles.batchCheckHeroCard}>
+                    <span className={styles.batchCheckHeroLabel}>{item.label}</span>
+                    <strong className={styles.batchCheckHeroValue}>{item.value}</strong>
+                    {item.hint ? <span className={styles.batchCheckHeroHint}>{item.hint}</span> : null}
+                  </div>
+                ))}
+              </div>
+
+              <div className={styles.batchCheckActionBar}>
+                <div className={styles.batchCheckActionHint}>
+                  {t('auth_files.batch_check_summary_hint')}
+                </div>
+                <div className={styles.batchCheckActionButtons}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleOpenBatchCheckDetails()}
+                    disabled={!hasBatchCheckDisplayResults}
+                  >
+                    {t('auth_files.batch_check_view_details')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleDeleteInvalidated401}
+                    disabled={
+                      disableControls ||
+                      batchChecking ||
+                      batchStatusUpdating ||
+                      batchCheckActionPending !== null ||
+                      (batchCheckActionCandidates?.invalidated_401_names.length ?? 0) === 0
+                    }
+                    loading={batchCheckActionPending === 'delete_invalidated_401'}
+                  >
+                    {`${t('auth_files.batch_check_action_delete_invalidated_401')} (${batchCheckActionCandidates?.invalidated_401_names.length ?? 0})`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleDisableExhausted}
+                    disabled={
+                      disableControls ||
+                      batchChecking ||
+                      batchStatusUpdating ||
+                      batchCheckActionPending !== null ||
+                      (batchCheckActionCandidates?.disable_exhausted_names.length ?? 0) === 0
+                    }
+                    loading={batchCheckActionPending === 'disable_exhausted'}
+                  >
+                    {`${t('auth_files.batch_check_action_disable_exhausted')} (${batchCheckActionCandidates?.disable_exhausted_names.length ?? 0})`}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleReenableRecovered}
+                    disabled={
+                      disableControls ||
+                      batchChecking ||
+                      batchStatusUpdating ||
+                      batchCheckActionPending !== null ||
+                      (batchCheckActionCandidates?.reenable_names.length ?? 0) === 0
+                    }
+                    loading={batchCheckActionPending === 'reenable_recovered'}
+                  >
+                    {`${t('auth_files.batch_check_action_reenable_recovered')} (${batchCheckActionCandidates?.reenable_names.length ?? 0})`}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : !batchChecking ? (
+            <div className={styles.batchCheckEmptyHint}>
+              {t('auth_files.batch_check_empty_desc')}
+            </div>
+          ) : null}
+        </div>
         <div className={styles.filterSection}>
           {renderFilterTags()}
 
@@ -798,6 +1411,8 @@ export function AuthFilesPage() {
                     quotaFilterType={quotaFilterType}
                     keyStats={keyStats}
                     statusBarCache={statusBarCache}
+                    batchCheckResult={resultsMap.get(file.name) ?? null}
+                    skippedReason={skippedMap.get(file.name)?.reason ?? null}
                     onShowModels={showModels}
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
@@ -876,6 +1491,13 @@ export function AuthFilesPage() {
         excluded={excluded}
         onClose={closeModelsModal}
         onCopyText={copyTextWithNotification}
+      />
+
+      <AuthFilesBatchCheckModal
+        open={batchCheckModalOpen}
+        response={liveBatchCheckResponse}
+        focusName={batchCheckFocusName}
+        onClose={handleCloseBatchCheckDetails}
       />
 
       <AuthFilesPrefixProxyEditorModal

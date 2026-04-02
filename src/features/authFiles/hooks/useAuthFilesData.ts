@@ -45,6 +45,7 @@ export type UseAuthFilesDataResult = {
   deselectAll: () => void;
   batchDownload: (names: string[]) => Promise<void>;
   batchSetStatus: (names: string[], enabled: boolean) => Promise<void>;
+  deleteFilesNow: (names: string[]) => Promise<{ deleted: number; failed: number; files: string[] }>;
   batchDelete: (names: string[]) => void;
 };
 
@@ -564,6 +565,45 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     [showNotification, t]
   );
 
+  const deleteFilesNow = useCallback(
+    async (names: string[]) => {
+      const uniqueNames = Array.from(new Set(names));
+      if (uniqueNames.length === 0) {
+        return { deleted: 0, failed: 0, files: [] as string[] };
+      }
+
+      try {
+        const result = await authFilesApi.deleteFiles(uniqueNames);
+        applyDeletedFiles(result.files);
+        void refreshKeyStats().catch(() => {});
+
+        if (result.failed.length === 0) {
+          showNotification(`${t('auth_files.delete_all_success')} (${result.deleted})`, 'success');
+        } else {
+          showNotification(
+            t('auth_files.delete_filtered_partial', {
+              success: result.deleted,
+              failed: result.failed.length,
+              type: t('auth_files.filter_all'),
+            }),
+            'warning'
+          );
+        }
+
+        return {
+          deleted: result.deleted,
+          failed: result.failed.length,
+          files: result.files,
+        };
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : '';
+        showNotification(`${t('notification.delete_failed')}: ${errorMessage}`, 'error');
+        throw err;
+      }
+    },
+    [applyDeletedFiles, refreshKeyStats, showNotification, t]
+  );
+
   const batchDelete = useCallback(
     (names: string[]) => {
       const uniqueNames = Array.from(new Set(names));
@@ -575,33 +615,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
         variant: 'danger',
         confirmText: t('common.confirm'),
         onConfirm: async () => {
-          try {
-            const result = await authFilesApi.deleteFiles(uniqueNames);
-            applyDeletedFiles(result.files);
-
-            if (result.failed.length === 0) {
-              showNotification(
-                `${t('auth_files.delete_all_success')} (${result.deleted})`,
-                'success'
-              );
-            } else {
-              showNotification(
-                t('auth_files.delete_filtered_partial', {
-                  success: result.deleted,
-                  failed: result.failed.length,
-                  type: t('auth_files.filter_all'),
-                }),
-                'warning'
-              );
-            }
-          } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : '';
-            showNotification(`${t('notification.delete_failed')}: ${errorMessage}`, 'error');
-          }
+          await deleteFilesNow(uniqueNames);
         },
       });
     },
-    [applyDeletedFiles, showConfirmation, showNotification, t]
+    [deleteFilesNow, showConfirmation, t]
   );
 
   return {
@@ -629,6 +647,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     deselectAll,
     batchDownload,
     batchSetStatus,
+    deleteFilesNow,
     batchDelete,
   };
 }

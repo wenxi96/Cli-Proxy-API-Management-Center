@@ -12,6 +12,7 @@ export type AuthFilesUiState = {
   regularPageSize?: number;
   compactPageSize?: number;
   sortMode?: AuthFilesSortMode;
+  batchCheckConcurrency?: number;
 };
 
 const AUTH_FILES_UI_STATE_KEY = 'authFilesPage.uiState';

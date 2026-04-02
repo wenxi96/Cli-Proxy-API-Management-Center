@@ -11,10 +11,10 @@ import {
   IconTrash2,
 } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
-import type { AuthFileItem } from '@/types';
+import type { AuthFileBatchCheckResult, AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
 import { calculateStatusBarData, normalizeAuthIndex, type KeyStats } from '@/utils/usage';
-import { formatFileSize } from '@/utils/format';
+import { formatDateTime, formatFileSize } from '@/utils/format';
 import {
   QUOTA_PROVIDER_TYPES,
   formatModified,
@@ -45,6 +45,8 @@ export type AuthFileCardProps = {
   quotaFilterType: QuotaProviderType | null;
   keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
+  batchCheckResult?: AuthFileBatchCheckResult | null;
+  skippedReason?: string | null;
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
@@ -57,6 +59,15 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   const provider = resolveAuthProvider(file);
   if (!QUOTA_PROVIDER_TYPES.has(provider as QuotaProviderType)) return null;
   return provider as QuotaProviderType;
+};
+
+const humanizeToken = (value: string): string => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return '-';
+  return trimmed
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
 export function AuthFileCard(props: AuthFileCardProps) {
@@ -72,6 +83,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
     quotaFilterType,
     keyStats,
     statusBarCache,
+    batchCheckResult,
+    skippedReason,
     onShowModels,
     onDownload,
     onOpenPrefixProxyEditor,
@@ -91,7 +104,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
 
-  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
+  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact && !batchCheckResult;
 
   const providerCardClass =
     quotaType === 'antigravity'
@@ -132,6 +145,35 @@ export function AuthFileCard(props: AuthFileCardProps) {
       : hasStatusWarning
         ? styles.stateBadgeWarning
         : styles.stateBadgeActive;
+
+  const resolveBatchCheckLabel = (type: 'classification' | 'bucket' | 'reason', value: string) => {
+    const key = `auth_files.batch_check_${type}_${value}`;
+    const translated = t(key);
+    return translated === key ? humanizeToken(value) : translated;
+  };
+
+  const batchCheckRemainingLabel =
+    typeof batchCheckResult?.remaining_percent === 'number'
+      ? `${batchCheckResult.remaining_percent}%`
+      : t('common.not_set');
+  const batchCheckCheckedAt = batchCheckResult?.checked_at
+    ? formatDateTime(batchCheckResult.checked_at)
+    : t('common.not_set');
+  const batchCheckClassificationLabel = batchCheckResult
+    ? resolveBatchCheckLabel('classification', batchCheckResult.classification)
+    : '';
+  const batchCheckBucketLabel = batchCheckResult
+    ? resolveBatchCheckLabel('bucket', batchCheckResult.bucket)
+    : '';
+  const skippedReasonLabel = skippedReason ? resolveBatchCheckLabel('reason', skippedReason) : '';
+  const batchCheckBadgeClass =
+    batchCheckResult?.classification === 'ok'
+      ? styles.batchCheckBadgeSuccess
+      : batchCheckResult?.classification === 'no_quota'
+        ? styles.batchCheckBadgeWarning
+        : batchCheckResult
+          ? styles.batchCheckBadgeDanger
+          : styles.batchCheckBadgeMuted;
 
   return (
     <div
@@ -240,6 +282,56 @@ export function AuthFileCard(props: AuthFileCardProps) {
               <ProviderStatusBar statusData={statusData} styles={styles} />
             </div>
 
+            {(batchCheckResult || skippedReasonLabel) && (
+              <div className={styles.batchCheckInlineCard}>
+                <div className={styles.batchCheckInlineHeader}>
+                  <span className={styles.batchCheckInlineTitle}>
+                    {t('auth_files.batch_check_inline_title')}
+                  </span>
+                  {batchCheckResult && (
+                    <div className={styles.batchCheckInlineBadges}>
+                      <span className={`${styles.batchCheckBadge} ${batchCheckBadgeClass}`}>
+                        {batchCheckClassificationLabel}
+                      </span>
+                      <span
+                        className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}
+                      >
+                        {batchCheckBucketLabel}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {batchCheckResult ? (
+                  <>
+                    <div className={styles.batchCheckInlineMetrics}>
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_remaining_percent'),
+                        batchCheckRemainingLabel
+                      )}
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_checked_at'),
+                        batchCheckCheckedAt
+                      )}
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_available'),
+                        batchCheckResult.available ? t('common.yes') : t('common.no')
+                      )}
+                    </div>
+                    {batchCheckResult.error_message && (
+                      <div className={styles.batchCheckInlineMessage}>
+                        {batchCheckResult.error_message}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={styles.batchCheckInlineMessage}>
+                    {t('auth_files.batch_check_skipped_inline', { reason: skippedReasonLabel })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {showQuotaLayout && quotaType && (
               <AuthFileQuotaSection
                 file={file}
@@ -325,6 +417,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function renderInlineMetric(label: string, value: string) {
+  return (
+    <div className={styles.batchCheckInlineMetric}>
+      <span className={styles.batchCheckInlineMetricLabel}>{label}</span>
+      <span className={styles.batchCheckInlineMetricValue}>{value}</span>
     </div>
   );
 }

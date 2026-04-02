@@ -46,6 +46,210 @@
   }
 }
 
+.batchCheckPanel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: 16px;
+  margin-bottom: $spacing-lg;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bg-secondary) 94%, var(--primary-color) 8%),
+    color-mix(in srgb, var(--bg-primary) 95%, var(--success-color) 4%)
+  );
+}
+
+.batchCheckPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+.batchCheckPanelTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batchCheckPanelTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckPanelDescription {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.batchCheckPanelActions {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: $spacing-sm;
+}
+
+.batchCheckInlineControls {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: $spacing-sm;
+  overflow-x: auto;
+  padding-bottom: 2px;
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+.batchCheckScopeControl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.batchCheckConcurrencyControl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 116px;
+  min-width: 116px;
+}
+
+.batchCheckConcurrencyInput {
+  width: 116px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.batchCheckStartButton {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  white-space: nowrap;
+}
+
+.batchCheckScopeLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.batchCheckPanelMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.batchCheckProgressSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+.batchCheckProgressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.batchCheckProgressBar {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+.batchCheckProgressBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary-color) 86%, white 4%),
+    color-mix(in srgb, var(--success-color) 76%, var(--primary-color) 24%)
+  );
+  transition: width 180ms ease-out;
+}
+
+.batchCheckProgressHint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.batchCheckEmptyHint {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.batchCheckSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckSummaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+}
+
+.batchCheckSummaryLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.batchCheckSummaryValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .titleWrapper {
   display: flex;
   align-items: center;
@@ -100,7 +304,6 @@
   }
 }
 
-
 .filterAllIconWrap {
   position: relative;
   border-color: color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
@@ -118,7 +321,6 @@
   display: block;
   color: color-mix(in srgb, var(--primary-color) 70%, var(--text-primary));
 }
-
 
 .filterContent {
   display: flex;
@@ -1026,6 +1228,45 @@
   margin-top: 1px;
 }
 
+.batchCheckBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  border: 1px solid transparent;
+}
+
+.batchCheckBadgeSuccess {
+  color: var(--success-badge-text, #065f46);
+  background: color-mix(in srgb, var(--success-badge-bg, #d1fae5) 58%, transparent);
+}
+
+.batchCheckBadgeWarning {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 62%, transparent);
+}
+
+.batchCheckBadgeDanger {
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+}
+
+.batchCheckBadgeMuted {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+}
+
+.batchCheckBadgeOutline {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--border-color) 78%, transparent);
+  background: transparent;
+}
+
 .cardInsights {
   display: flex;
   flex-direction: column;
@@ -1136,6 +1377,79 @@
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.batchCheckInlineCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+}
+
+.batchCheckInlineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.batchCheckInlineTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckInlineButton {
+  align-self: flex-start;
+}
+
+.batchCheckInlineBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batchCheckInlineMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.batchCheckInlineMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batchCheckInlineMetricLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.batchCheckInlineMetricValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.batchCheckInlineMessage {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: break-word;
 }
 
 // 状态监测栏
@@ -1741,7 +2055,7 @@
 
   .viewModeSwitch {
     width: 100%;
-    justify-content: stretch;
+    justify-content: flex-start;
   }
 
   .viewModeSwitch :global(.btn.btn-sm) {
@@ -1835,6 +2149,242 @@
   font-style: italic;
   text-align: center;
   padding: $spacing-lg;
+}
+
+.batchCheckModalContent {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+}
+
+.batchCheckModal {
+  width: 100%;
+}
+
+.batchCheckResultList {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.batchCheckResultCard {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+}
+
+.batchCheckResultCardFocused {
+  border-color: color-mix(in srgb, var(--primary-color) 45%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 18%, transparent);
+}
+
+.batchCheckResultHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+.batchCheckResultTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batchCheckResultName {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.batchCheckResultSubTitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.batchCheckBadgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batchCheckMetricGrid,
+.batchCheckDetailMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+}
+
+.batchCheckMetricButton,
+.batchCheckDistributionCardButton,
+.batchCheckHealthCardButton,
+.batchCheckDiagnosisButton,
+.batchCheckDistributionRowButton {
+  appearance: none;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color $transition-fast,
+    background-color $transition-fast,
+    box-shadow $transition-fast,
+    transform $transition-fast;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 38%, var(--border-color));
+    background: color-mix(in srgb, var(--bg-primary) 86%, var(--primary-color) 8%);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+.batchCheckMetricButton {
+  width: 100%;
+}
+
+.batchCheckMetricLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.batchCheckMetricValue {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.batchCheckInfoBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.batchCheckInfoBanner strong {
+  color: var(--text-primary);
+}
+
+.batchCheckInfoBannerDanger {
+  border-color: color-mix(in srgb, var(--danger-color) 28%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 8%, transparent);
+}
+
+.batchCheckDetailGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batchCheckDetailGroupTitle,
+.batchCheckSectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckWindowGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckWindowCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
+}
+
+.batchCheckWindowTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckWindowModels {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.batchCheckWindowMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.batchCheckSkippedSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batchCheckSkippedList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckSkippedItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+}
+
+.batchCheckSkippedName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.batchCheckSkippedMeta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
 }
 
 // 模型列表弹窗
@@ -1963,4 +2513,435 @@
   font-size: 12px;
   color: var(--text-tertiary);
   font-family: inherit;
+}
+
+.batchCheckHeroGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+
+  @media (max-width: 1380px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  @media (max-width: 980px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @include mobile {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.batchCheckHeroCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+}
+
+.batchCheckHeroLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.batchCheckHeroValue {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  word-break: break-word;
+}
+
+.batchCheckHeroHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.batchCheckActionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.batchCheckActionHint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.batchCheckActionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+
+  @include mobile {
+    width: 100%;
+    justify-content: stretch;
+  }
+}
+
+.batchCheckSummaryDirtyHint {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--warning-border) 70%, transparent);
+  background: color-mix(in srgb, var(--warning-bg) 68%, transparent);
+  color: var(--warning-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.batchCheckMetricHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.batchCheckModalSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batchCheckSectionTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batchCheckSectionDescription {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.batchCheckHealthGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckHealthCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+.batchCheckHealthCardButton {
+  width: 100%;
+}
+
+.batchCheckHealthHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.batchCheckHealthLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckHealthRange {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.batchCheckHealthValue {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batchCheckHealthBarTrack {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--border-color) 48%, transparent);
+}
+
+.batchCheckHealthBarFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary-color) 82%, white 6%),
+    color-mix(in srgb, var(--success-color) 74%, var(--primary-color) 26%)
+  );
+}
+
+.batchCheckHealthHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.batchCheckDistributionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckDistributionCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+}
+
+.batchCheckDistributionCardButton {
+  width: 100%;
+}
+
+.batchCheckDistributionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckDistributionValue {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batchCheckDistributionHint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.batchCheckDistributionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batchCheckDistributionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.batchCheckDistributionRowButton {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 56%, transparent);
+}
+
+.batchCheckDistributionRow strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batchCheckDistributionEmpty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.batchCheckDiagnosisList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.batchCheckDiagnosisCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+}
+
+.batchCheckDiagnosisButton {
+  width: 100%;
+}
+
+.batchCheckDiagnosisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.batchCheckDiagnosisLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.batchCheckDiagnosisCount {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batchCheckDiagnosisNote {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.batchCheckDiagnosisExamples {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  word-break: break-word;
+}
+
+.batchCheckDetailModalGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batchCheckDetailModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+.batchCheckDetailModalCount {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.batchCheckDetailEntryList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batchCheckDetailEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 66%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
+}
+
+.batchCheckDetailEntryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.batchCheckDetailEntryTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batchCheckDetailEntryName {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.batchCheckDetailEntrySubtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.batchCheckDetailFacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.batchCheckDetailFact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 52%, transparent);
+}
+
+.batchCheckDetailEntryNote,
+.batchCheckDetailEntryError {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.batchCheckDetailEntryNote {
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+  color: var(--text-secondary);
+}
+
+.batchCheckDetailEntryError {
+  border: 1px solid color-mix(in srgb, var(--danger-color) 28%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 8%, transparent);
+  color: var(--text-primary);
 }

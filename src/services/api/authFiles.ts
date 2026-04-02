@@ -3,7 +3,12 @@
  */
 
 import { apiClient } from './client';
-import type { AuthFilesResponse } from '@/types/authFile';
+import type {
+  AuthFileBatchCheckJobCreateResponse,
+  AuthFileBatchCheckJobResponse,
+  AuthFilesBatchCheckResponse,
+  AuthFilesResponse,
+} from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 
 type StatusError = { status?: number };
@@ -34,6 +39,7 @@ type AuthFileBatchDeleteResult = {
   files: string[];
   failed: AuthFileBatchFailure[];
 };
+type BatchCheckArrayPayload<T> = T[] | null | undefined;
 
 export const AUTH_FILE_INVALID_JSON_OBJECT_ERROR = 'AUTH_FILE_INVALID_JSON_OBJECT';
 
@@ -82,12 +88,11 @@ const normalizeBatchFailures = (value: unknown): AuthFileBatchFailure[] => {
   }, []);
 };
 
-const deriveSuccessfulFileNames = (requestedNames: string[], failed: AuthFileBatchFailure[]): string[] => {
-  const failedNames = new Set(
-    failed
-      .map((entry) => entry.name.trim())
-      .filter(Boolean)
-  );
+const deriveSuccessfulFileNames = (
+  requestedNames: string[],
+  failed: AuthFileBatchFailure[]
+): string[] => {
+  const failedNames = new Set(failed.map((entry) => entry.name.trim()).filter(Boolean));
 
   if (failedNames.size === 0) {
     return [...requestedNames];
@@ -124,7 +129,8 @@ const normalizeBatchUploadResponse = (
   }
 
   return {
-    status: typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
+    status:
+      typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
     uploaded,
     files: uploadedFiles,
     failed,
@@ -159,12 +165,154 @@ const normalizeBatchDeleteResponse = (
   }
 
   return {
-    status: typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
+    status:
+      typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
     deleted,
     files: deletedFiles,
     failed,
   };
 };
+
+const normalizeBatchCheckResults = (
+  value: BatchCheckArrayPayload<AuthFilesBatchCheckResponse['results'][number]>
+): AuthFilesBatchCheckResponse['results'] => (Array.isArray(value) ? value : []);
+
+const normalizeBatchCheckSkipped = (
+  value: BatchCheckArrayPayload<AuthFilesBatchCheckResponse['skipped'][number]>
+): AuthFilesBatchCheckResponse['skipped'] => (Array.isArray(value) ? value : []);
+
+const BATCH_CHECK_HEALTH_BUCKET_KEYS = [
+  'full',
+  'very_high',
+  'high',
+  'usable',
+  'fair',
+  'alert',
+  'danger',
+  'exhausted',
+  'unknown',
+] as const;
+
+const BATCH_CHECK_REFRESH_WINDOW_KEYS = [
+  '已到刷新时间',
+  '1小时内',
+  '1-3小时',
+  '3-6小时',
+  '6-12小时',
+  '12-24小时',
+  '1-3天',
+  '3-7天',
+  '下周及以后',
+  '未知',
+] as const;
+
+const normalizeNumberRecord = (
+  value: unknown,
+  defaults: readonly string[] = []
+): Record<string, number> => {
+  const result: Record<string, number> = {};
+  defaults.forEach((key) => {
+    result[key] = 0;
+  });
+
+  if (!value || typeof value !== 'object') {
+    return result;
+  }
+
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return;
+    result[key] = raw;
+  });
+
+  return result;
+};
+
+const normalizeBatchCheckAggregate = (
+  value: AuthFilesBatchCheckResponse['aggregate'] | null | undefined
+): AuthFilesBatchCheckResponse['aggregate'] => ({
+  capacity_overview: {
+    remaining_total: value?.capacity_overview?.remaining_total ?? 0,
+    total_capacity: value?.capacity_overview?.total_capacity ?? 0,
+    remaining_percent: value?.capacity_overview?.remaining_percent ?? 0,
+    used_total: value?.capacity_overview?.used_total ?? 0,
+    used_percent: value?.capacity_overview?.used_percent ?? 0,
+    equivalent_full_accounts: value?.capacity_overview?.equivalent_full_accounts ?? 0,
+    average_remaining: value?.capacity_overview?.average_remaining,
+    median_remaining: value?.capacity_overview?.median_remaining,
+    unknown_remaining_count: value?.capacity_overview?.unknown_remaining_count ?? 0,
+  },
+  risk_overview: {
+    invalidated_401_count: value?.risk_overview?.invalidated_401_count ?? 0,
+    no_quota_count: value?.risk_overview?.no_quota_count ?? 0,
+    api_error_count: value?.risk_overview?.api_error_count ?? 0,
+    request_failed_count: value?.risk_overview?.request_failed_count ?? 0,
+    exhausted_count: value?.risk_overview?.exhausted_count ?? 0,
+    low_remaining_1_29_count: value?.risk_overview?.low_remaining_1_29_count ?? 0,
+    mid_low_remaining_1_49_count: value?.risk_overview?.mid_low_remaining_1_49_count ?? 0,
+  },
+  health_buckets: normalizeNumberRecord(value?.health_buckets, BATCH_CHECK_HEALTH_BUCKET_KEYS),
+  scope_overview: {
+    total_count: value?.scope_overview?.total_count ?? 0,
+    enabled_count: value?.scope_overview?.enabled_count ?? 0,
+    disabled_count: value?.scope_overview?.disabled_count ?? 0,
+    processed_count: value?.scope_overview?.processed_count ?? 0,
+    skipped_count: value?.scope_overview?.skipped_count ?? 0,
+  },
+  refresh_overview: {
+    next_refresh_at: value?.refresh_overview?.next_refresh_at,
+    highlight_windows: Array.isArray(value?.refresh_overview?.highlight_windows)
+      ? value?.refresh_overview?.highlight_windows.filter((item) => item && typeof item.label === 'string')
+      : [],
+    refresh_window_counts: normalizeNumberRecord(
+      value?.refresh_overview?.refresh_window_counts,
+      BATCH_CHECK_REFRESH_WINDOW_KEYS
+    ),
+  },
+  plan_distribution: {
+    plan_type_counts: normalizeNumberRecord(value?.plan_distribution?.plan_type_counts),
+    primary_cycle_counts: normalizeNumberRecord(value?.plan_distribution?.primary_cycle_counts),
+    secondary_cycle_counts: normalizeNumberRecord(value?.plan_distribution?.secondary_cycle_counts),
+  },
+  diagnosis: Array.isArray(value?.diagnosis)
+    ? value.diagnosis.map((item) => ({
+        label: typeof item?.label === 'string' ? item.label : '',
+        count: typeof item?.count === 'number' && Number.isFinite(item.count) ? item.count : 0,
+        note: typeof item?.note === 'string' ? item.note : '',
+        examples: Array.isArray(item?.examples)
+          ? item.examples
+              .map((entry) => String(entry ?? '').trim())
+              .filter(Boolean)
+          : [],
+      }))
+    : [],
+  action_candidates: {
+    invalidated_401_names: normalizeBatchFileNames(value?.action_candidates?.invalidated_401_names),
+    disable_exhausted_names: normalizeBatchFileNames(value?.action_candidates?.disable_exhausted_names),
+    reenable_names: normalizeBatchFileNames(value?.action_candidates?.reenable_names),
+    reenable_threshold_bucket:
+      typeof value?.action_candidates?.reenable_threshold_bucket === 'string'
+        ? value.action_candidates.reenable_threshold_bucket
+        : 'danger',
+  },
+});
+
+const normalizeBatchCheckResponse = (
+  payload: AuthFilesBatchCheckResponse
+): AuthFilesBatchCheckResponse => ({
+  ...payload,
+  aggregate: normalizeBatchCheckAggregate(payload?.aggregate),
+  results: normalizeBatchCheckResults(payload?.results),
+  skipped: normalizeBatchCheckSkipped(payload?.skipped),
+});
+
+const normalizeBatchCheckJobResponse = (
+  payload: AuthFileBatchCheckJobResponse
+): AuthFileBatchCheckJobResponse => ({
+  ...payload,
+  aggregate: normalizeBatchCheckAggregate(payload?.aggregate),
+  results: normalizeBatchCheckResults(payload?.results),
+  skipped: normalizeBatchCheckSkipped(payload?.skipped),
+});
 
 const readTextField = (entry: AuthFileEntry, key: string): string => {
   const value = entry[key];
@@ -349,10 +497,7 @@ const normalizeOauthModelAlias = (payload: unknown): Record<string, OAuthModelAl
   if (!payload || typeof payload !== 'object') return {};
 
   const record = payload as Record<string, unknown>;
-  const source =
-    record['oauth-model-alias'] ??
-    record.items ??
-    payload;
+  const source = record['oauth-model-alias'] ?? record.items ?? payload;
   if (!source || typeof source !== 'object') return {};
 
   const result: Record<string, OAuthModelAliasEntry[]> = {};
@@ -364,17 +509,17 @@ const normalizeOauthModelAlias = (payload: unknown): Record<string, OAuthModelAl
     if (!key) return;
     if (!Array.isArray(mappings)) return;
 
-	    const seen = new Set<string>();
-	    const normalized = mappings
-	      .map((item) => {
-	        if (!item || typeof item !== 'object') return null;
-	        const entry = item as Record<string, unknown>;
-	        const name = String(entry.name ?? entry.id ?? entry.model ?? '').trim();
-	        const alias = String(entry.alias ?? '').trim();
-	        if (!name || !alias) return null;
-	        const fork = entry.fork === true;
-	        return fork ? { name, alias, fork } : { name, alias };
-	      })
+    const seen = new Set<string>();
+    const normalized = mappings
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const entry = item as Record<string, unknown>;
+        const name = String(entry.name ?? entry.id ?? entry.model ?? '').trim();
+        const alias = String(entry.alias ?? '').trim();
+        if (!name || !alias) return null;
+        const fork = entry.fork === true;
+        return fork ? { name, alias, fork } : { name, alias };
+      })
       .filter(Boolean)
       .filter((entry) => {
         const aliasEntry = entry as OAuthModelAliasEntry;
@@ -396,6 +541,44 @@ const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
 
 export const authFilesApi = {
   list: async () => dedupeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+
+  batchCheck: async (
+    names?: string[],
+    includeDisabled = true,
+    concurrency?: number
+  ): Promise<AuthFilesBatchCheckResponse> => {
+    const normalizedNames = normalizeRequestedAuthFileNames(names ?? []);
+    const payload = await apiClient.post<AuthFilesBatchCheckResponse>('/auth-files/batch-check', {
+      ...(normalizedNames.length > 0 ? { names: normalizedNames } : {}),
+      include_disabled: includeDisabled,
+      ...(typeof concurrency === 'number' && Number.isFinite(concurrency)
+        ? { concurrency: Math.round(concurrency) }
+        : {}),
+    });
+    return normalizeBatchCheckResponse(payload);
+  },
+
+  createBatchCheckJob: async (
+    names?: string[],
+    includeDisabled = true,
+    concurrency?: number
+  ): Promise<AuthFileBatchCheckJobCreateResponse> => {
+    const normalizedNames = normalizeRequestedAuthFileNames(names ?? []);
+    return apiClient.post<AuthFileBatchCheckJobCreateResponse>('/auth-files/batch-check-jobs', {
+      ...(normalizedNames.length > 0 ? { names: normalizedNames } : {}),
+      include_disabled: includeDisabled,
+      ...(typeof concurrency === 'number' && Number.isFinite(concurrency)
+        ? { concurrency: Math.round(concurrency) }
+        : {}),
+    });
+  },
+
+  getBatchCheckJob: async (jobId: string) => {
+    const payload = await apiClient.get<AuthFileBatchCheckJobResponse>(
+      `/auth-files/batch-check-jobs/${encodeURIComponent(jobId)}`
+    );
+    return normalizeBatchCheckJobResponse(payload);
+  },
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
@@ -433,9 +616,12 @@ export const authFilesApi = {
   deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
 
   downloadText: async (name: string): Promise<string> => {
-    const response = await apiClient.getRaw(`/auth-files/download?name=${encodeURIComponent(name)}`, {
-      responseType: 'blob'
-    });
+    const response = await apiClient.getRaw(
+      `/auth-files/download?name=${encodeURIComponent(name)}`,
+      {
+        responseType: 'blob',
+      }
+    );
     const blob = response.data as Blob;
     return blob.text();
   },
@@ -475,8 +661,12 @@ export const authFilesApi = {
     const normalizedChannel = String(channel ?? '')
       .trim()
       .toLowerCase();
-    const normalizedAliases = normalizeOauthModelAlias({ [normalizedChannel]: aliases })[normalizedChannel] ?? [];
-    await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, { channel: normalizedChannel, aliases: normalizedAliases });
+    const normalizedAliases =
+      normalizeOauthModelAlias({ [normalizedChannel]: aliases })[normalizedChannel] ?? [];
+    await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
+      channel: normalizedChannel,
+      aliases: normalizedAliases,
+    });
   },
 
   deleteOauthModelAlias: async (channel: string) => {
@@ -485,16 +675,23 @@ export const authFilesApi = {
       .toLowerCase();
 
     try {
-      await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, { channel: normalizedChannel, aliases: [] });
+      await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
+        channel: normalizedChannel,
+        aliases: [],
+      });
     } catch (err: unknown) {
       const status = getStatusCode(err);
       if (status !== 405) throw err;
-      await apiClient.delete(`${OAUTH_MODEL_ALIAS_ENDPOINT}?channel=${encodeURIComponent(normalizedChannel)}`);
+      await apiClient.delete(
+        `${OAUTH_MODEL_ALIAS_ENDPOINT}?channel=${encodeURIComponent(normalizedChannel)}`
+      );
     }
   },
 
   // 获取认证凭证支持的模型
-  async getModelsForAuthFile(name: string): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
+  async getModelsForAuthFile(
+    name: string
+  ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
     const data = await apiClient.get<Record<string, unknown>>(
       `/auth-files/models?name=${encodeURIComponent(name)}`
     );
@@ -505,8 +702,12 @@ export const authFilesApi = {
   },
 
   // 获取指定 channel 的模型定义
-  async getModelDefinitions(channel: string): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
-    const normalizedChannel = String(channel ?? '').trim().toLowerCase();
+  async getModelDefinitions(
+    channel: string
+  ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
+    const normalizedChannel = String(channel ?? '')
+      .trim()
+      .toLowerCase();
     if (!normalizedChannel) return [];
     const data = await apiClient.get<Record<string, unknown>>(
       `/model-definitions/${encodeURIComponent(normalizedChannel)}`
@@ -515,5 +716,5 @@ export const authFilesApi = {
     return Array.isArray(models)
       ? (models as { id: string; display_name?: string; type?: string; owned_by?: string }[])
       : [];
-  }
+  },
 };
