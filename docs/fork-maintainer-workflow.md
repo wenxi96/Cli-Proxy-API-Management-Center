@@ -18,7 +18,7 @@ This setup separates four concerns:
 3. What is currently being integrated
 4. What is still under active development
 
-That keeps `main` clean and ensures only validated UI builds become published `management.html` release assets.
+That keeps `main` clean and ensures only validated UI builds on `master` become published `management.html` release assets.
 
 ## Daily Upstream Sync
 
@@ -80,7 +80,18 @@ git merge dev
 git push origin master
 ```
 
-### 6. Publish releases only from `master`
+### 6. Let `master` publish snapshot releases automatically
+
+```bash
+git checkout master
+git pull origin master
+git push origin master
+```
+
+Every push to `master` now triggers `.github/workflows/release.yml` and publishes a snapshot release tagged `master-<short_sha>`.
+That snapshot release uploads the latest built `management.html`, so backend forks that track `releases/latest` can pull the newest validated frontend automatically.
+
+### 7. Create formal versioned releases only from `master`
 
 ```bash
 git checkout master
@@ -89,8 +100,8 @@ git tag v2026.03.30-fork.1
 git push origin v2026.03.30-fork.1
 ```
 
-Only create release tags from validated `master` commits.
-The current release workflow still triggers on any `v*` tag, so this rule is enforced by maintainer discipline rather than workflow guards.
+Versioned `v*` tags still publish formal releases.
+Only create those tags from validated `master` commits.
 
 ## Local Sync Commands
 
@@ -116,7 +127,7 @@ If you want bare `git pull` to track `upstream/main`, you must configure `branch
 
 - Do not develop directly on `main`.
 - Do not use `master` for unfinished work.
-- Create release tags only from validated `master` commits.
-- The release workflow still triggers on any `v*` tag, so this rule depends on maintainer discipline.
+- Every validated `master` push will publish a snapshot `management.html` release automatically.
+- Create formal `v*` release tags only from validated `master` commits.
 - Keep `feature/*` branches short-lived.
 - Treat `master` as "validated frontend state", not "latest upstream state".

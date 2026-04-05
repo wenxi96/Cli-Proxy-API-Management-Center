@@ -18,7 +18,7 @@
 3. 当前正在集成什么
 4. 当前还在开发中的内容是什么
 
-这样可以保证 `main` 保持干净，也能把“可发布的 `management.html`”和“仍在开发中的前端页面”彻底分离。
+这样可以保证 `main` 保持干净，也能把 `master` 上“可发布的 `management.html`”和“仍在开发中的前端页面”彻底分离。
 
 ## 每日上游同步
 
@@ -80,7 +80,18 @@ git merge dev
 git push origin master
 ```
 
-### 6. 仅从 `master` 打发布标签
+### 6. 让 `master` 自动发布快照 release
+
+```bash
+git checkout master
+git pull origin master
+git push origin master
+```
+
+现在每次推送到 `master`，都会自动触发 `.github/workflows/release.yml`，发布一个标签为 `master-<short_sha>` 的快照 release。
+这个快照 release 会上传最新构建出的 `management.html`，这样依赖 `releases/latest` 的后端 fork 就能自动拉到最新已验证前端。
+
+### 7. 仅从 `master` 打正式版本标签
 
 ```bash
 git checkout master
@@ -89,8 +100,8 @@ git tag v2026.03.30-fork.1
 git push origin v2026.03.30-fork.1
 ```
 
-仅从已验证的 `master` 提交打发布标签。
-当前发布工作流仍会对任何 `v*` 标签触发，因此这是一条维护约定，而不是工作流硬性保护。
+`v*` 标签仍然用于正式 release。
+这些正式标签仍然只应从已验证的 `master` 提交打出。
 
 ## 本地手动同步命令
 
@@ -116,7 +127,7 @@ git push origin main
 
 - 不要直接在 `main` 上开发
 - 不要把未完成工作直接放进 `master`
-- 只从已验证的 `master` 提交打发布标签
-- 当前发布工作流仍会对任何 `v*` 标签触发，因此这是一条维护约定
+- 每次已验证的 `master` 推送都会自动发布快照 `management.html` release
+- 只从已验证的 `master` 提交打正式 `v*` 版本标签
 - `feature/*` 分支尽量保持短生命周期
 - 把 `master` 理解为“已验证的前端稳定状态”，而不是“最新上游状态”

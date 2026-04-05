@@ -118,7 +118,8 @@ npm run build
 ## 构建与发布说明
 
 - 使用 Vite 输出 **单文件 HTML**（`dist/index.html`），资源全部内联（`vite-plugin-singlefile`）。
-- 打 `vX.Y.Z` 标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
+- 推送到 `master` 会触发 `.github/workflows/release.yml`，自动发布一个 `master-<short_sha>` 快照 release，并上传 `dist/management.html`。
+- 打 `vX.Y.Z` 标签仍会发布正式 release，并上传同一个 `dist/management.html` 资产。
 - 页脚显示的 UI 版本在构建期注入（优先使用环境变量 `VERSION`，否则使用 git tag / `package.json`）。
 
 ## 安全提示
