@@ -5,34 +5,50 @@ import path from 'path';
 import { execSync } from 'child_process';
 import fs from 'fs';
 
+function normalizeVersion(raw: string): string {
+  return raw.trim().replace(/^v/i, '');
+}
+
 // Get version from environment, git tag, or package.json
 function getVersion(): string {
   // 1. Environment variable (set by GitHub Actions)
   if (process.env.VERSION) {
-    return process.env.VERSION;
+    return normalizeVersion(process.env.VERSION);
   }
 
   // 2. Try git tag
   try {
     const gitTag = execSync('git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
     if (gitTag) {
-      return gitTag;
+      return normalizeVersion(gitTag);
     }
   } catch {
     // Git not available or no tags
   }
 
-  // 3. Fall back to package.json version
+  // 3. Fall back to branch + commit for local master builds
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
+    const shortSha = execSync('git rev-parse --short HEAD 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
+    const safeBranch = branch.replace(/[^0-9A-Za-z._-]+/g, '-').replace(/^-+|-+$/g, '');
+    if (safeBranch && shortSha) {
+      return `${safeBranch}.${shortSha}`;
+    }
+  } catch {
+    // Git not available
+  }
+
+  // 4. Fall back to package.json version
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
     if (pkg.version && pkg.version !== '0.0.0') {
-      return pkg.version;
+      return normalizeVersion(pkg.version);
     }
   } catch {
     // package.json not readable
   }
 
-  return 'dev';
+  return 'local';
 }
 
 // https://vitejs.dev/config/

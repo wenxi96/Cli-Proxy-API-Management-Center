@@ -17,10 +17,22 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Fetch upstream tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
+          else
+            git remote add upstream https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
+          fi
+          git fetch origin --force --tags
+          git fetch upstream master --force --tags
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,15 +47,16 @@ jobs:
           set -euo pipefail
 
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            release_tag="${GITHUB_REF_NAME}"
-            release_name="${GITHUB_REF_NAME}"
-            build_version="${GITHUB_REF_NAME}"
+            eval "$(bash ./scripts/version.sh release "${GITHUB_REF_NAME}" | sed 's/^/export /')"
+            release_tag="${RELEASE_TAG}"
+            release_name="${RELEASE_NAME}"
+            build_version="${VERSION}"
             release_kind="tag"
           else
-            short_sha="${GITHUB_SHA::7}"
-            release_tag="master-${short_sha}"
-            release_name="master snapshot ${short_sha}"
-            build_version="master-${short_sha}"
+            eval "$(bash ./scripts/version.sh snapshot | sed 's/^/export /')"
+            release_tag="${SNAPSHOT_TAG}"
+            release_name="${SNAPSHOT_NAME}"
+            build_version="${VERSION}"
             release_kind="snapshot"
           fi
 
@@ -89,6 +102,9 @@ jobs:
               echo "Automated snapshot release for \`master\`."
               echo
               echo "- Branch: \`master\`"
+              if [[ -n "${{ steps.meta.outputs.build_version }}" ]]; then
+                echo "- Snapshot Version: \`${{ steps.meta.outputs.build_version }}\`"
+              fi
               echo "- Commit: \`${GITHUB_SHA}\`"
               echo "- Workflow Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
               echo
@@ -98,7 +114,7 @@ jobs:
           fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.release_tag }}
           name: ${{ steps.meta.outputs.release_name }}
