@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 
 function normalizeVersion(raw: string): string {
-  return raw.trim().replace(/^v/i, '');
+  return raw.trim().replace(/^v/i, '').replace(/-build\.[0-9a-f]+$/i, '');
 }
 
 // Get version from environment, git tag, or package.json
@@ -26,7 +26,7 @@ function getVersion(): string {
     // Git not available or no tags
   }
 
-  // 3. Fall back to branch + commit for local master builds
+  // 3. Fall back to branch + commit for local non-release builds
   try {
     const branch = execSync('git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
     const shortSha = execSync('git rev-parse --short HEAD 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();

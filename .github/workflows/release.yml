@@ -67,6 +67,14 @@ jobs:
             echo "release_kind=${release_kind}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Generate release notes
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.build_version }}
+        run: |
+          set -euo pipefail
+          bash ./scripts/release-notes.sh release-notes.md
+
       - name: Install dependencies
         run: npm ci
 
@@ -80,38 +88,6 @@ jobs:
           cd dist
           mv index.html management.html
           ls -lh management.html
-
-      - name: Generate release notes
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ steps.meta.outputs.release_kind }}" == "tag" ]]; then
-            current_tag="${GITHUB_REF_NAME}"
-            previous_tag="$(git tag --list 'v*' --sort=-v:refname | grep -v "^${current_tag}$" | head -n 1 || true)"
-            if [ -n "${previous_tag}" ]; then
-              range="${previous_tag}..${current_tag}"
-            else
-              range="${current_tag}"
-            fi
-
-            : > release-notes.md
-            git log --pretty=format:"- %h %s" "${range}" >> release-notes.md
-          else
-            {
-              echo "Automated snapshot release for \`master\`."
-              echo
-              echo "- Branch: \`master\`"
-              if [[ -n "${{ steps.meta.outputs.build_version }}" ]]; then
-                echo "- Snapshot Version: \`${{ steps.meta.outputs.build_version }}\`"
-              fi
-              echo "- Commit: \`${GITHUB_SHA}\`"
-              echo "- Workflow Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-              echo
-              echo "## Latest Commit"
-              git log -1 --pretty=format:"- %h %s"
-            } > release-notes.md
-          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

@@ -8,17 +8,9 @@ INPUT_TAG="${2:-}"
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "${ROOT_DIR}"
 
-resolve_base_tag() {
-  local base_tag
-  base_tag="$(
-    git tag --merged HEAD --list 'v*' --sort=-version:refname \
-      | grep -Ev '(^|[-.])(master|dev)([-.]|$)' \
-      | head -n1 \
-      || true
-  )"
-
-  printf '%s' "${base_tag}"
-}
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/release-lib.sh"
+release_load_metadata
 
 emit() {
   printf '%s=%s\n' "$1" "$2"
@@ -28,20 +20,22 @@ SHORT_COMMIT="$(git rev-parse --short HEAD)"
 
 case "${MODE}" in
   snapshot)
-    BASE_TAG="$(resolve_base_tag)"
-    if [[ -n "${BASE_TAG}" ]]; then
-      BASE_VERSION="${BASE_TAG#v}"
-      VERSION="${BASE_VERSION}-master.${SHORT_COMMIT}"
-    else
-      BASE_VERSION=""
-      VERSION="master.${SHORT_COMMIT}"
+    BASE_TAG="$(release_resolve_base_tag)"
+    if [[ -z "${BASE_TAG}" ]]; then
+      echo "failed to resolve upstream base tag from current branch" >&2
+      exit 1
     fi
-    SNAPSHOT_TAG="v${VERSION}"
+
+    BASE_VERSION="${BASE_TAG#v}"
+    VERSION="$(release_resolve_display_version "${BASE_TAG}")"
+    SNAPSHOT_TAG="$(release_resolve_snapshot_tag "${VERSION}" "${SHORT_COMMIT}")"
     SNAPSHOT_NAME="${VERSION}"
 
     emit "MODE" "${MODE}"
     emit "BASE_TAG" "${BASE_TAG}"
     emit "BASE_VERSION" "${BASE_VERSION}"
+    emit "CUSTOM_MARK" "${CUSTOM_MARK}"
+    emit "CUSTOM_VERSION" "${CUSTOM_VERSION}"
     emit "VERSION" "${VERSION}"
     emit "SNAPSHOT_TAG" "${SNAPSHOT_TAG}"
     emit "SNAPSHOT_NAME" "${SNAPSHOT_NAME}"
@@ -59,10 +53,11 @@ case "${MODE}" in
       exit 1
     fi
 
+    VERSION="$(release_normalize_version_value "${RELEASE_TAG}")"
     emit "MODE" "${MODE}"
     emit "RELEASE_TAG" "${RELEASE_TAG}"
-    emit "RELEASE_NAME" "${RELEASE_TAG}"
-    emit "VERSION" "${RELEASE_TAG#v}"
+    emit "RELEASE_NAME" "${VERSION}"
+    emit "VERSION" "${VERSION}"
     ;;
   *)
     echo "unsupported mode: ${MODE}" >&2
