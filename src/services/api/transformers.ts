@@ -366,7 +366,10 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   if (isRecord(quota)) {
     config.quotaExceeded = {
       switchProject: normalizeBoolean(quota['switch-project'] ?? quota.switchProject),
-      switchPreviewModel: normalizeBoolean(quota['switch-preview-model'] ?? quota.switchPreviewModel)
+      switchPreviewModel: normalizeBoolean(quota['switch-preview-model'] ?? quota.switchPreviewModel),
+      autoDisableAuthFileOnZeroQuota: normalizeBoolean(
+        quota['auto-disable-auth-file-on-zero-quota'] ?? quota.autoDisableAuthFileOnZeroQuota
+      )
     };
   }
 

@@ -1479,7 +1479,9 @@
           "switch_project": "切换项目",
           "switch_project_desc": "配额耗尽时自动切换到其他项目",
           "switch_preview_model": "切换预览模型",
-          "switch_preview_model_desc": "配额耗尽时切换到预览版本模型"
+          "switch_preview_model_desc": "配额耗尽时切换到预览版本模型",
+          "auto_disable_auth_file": "自动禁用零额度认证文件",
+          "auto_disable_auth_file_desc": "当支持真实额度查询的认证文件确认剩余额度为 0 时，自动禁用该文件"
         },
         "streaming": {
           "title": "流式传输配置",

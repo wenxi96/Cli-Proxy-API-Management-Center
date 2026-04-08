@@ -1479,7 +1479,9 @@
           "switch_project": "Switch Project",
           "switch_project_desc": "Automatically switch to another project when quota is exceeded",
           "switch_preview_model": "Switch to Preview Model",
-          "switch_preview_model_desc": "Switch to preview model version when quota is exceeded"
+          "switch_preview_model_desc": "Switch to preview model version when quota is exceeded",
+          "auto_disable_auth_file": "Auto Disable Zero-Quota Auth File",
+          "auto_disable_auth_file_desc": "Automatically disable a supported auth file after async confirmation that its remaining quota is zero"
         },
         "streaming": {
           "title": "Streaming Configuration",

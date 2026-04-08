@@ -53,6 +53,12 @@ export const configApi = {
     apiClient.put('/quota-exceeded/switch-preview-model', { value: enabled }),
 
   /**
+   * 配额回退：额度归零后自动禁用认证文件
+   */
+  updateAutoDisableAuthFileOnZeroQuota: (enabled: boolean) =>
+    apiClient.put('/quota-exceeded/auto-disable-auth-file-on-zero-quota', { value: enabled }),
+
+  /**
    * 使用统计开关
    */
   updateUsageStatistics: (enabled: boolean) =>
