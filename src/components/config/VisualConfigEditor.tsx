@@ -936,6 +936,17 @@ export function VisualConfigEditor({
                 disabled={disabled}
                 onChange={(quotaSwitchPreviewModel) => onChange({ quotaSwitchPreviewModel })}
               />
+              <ToggleRow
+                title={t('config_management.visual.sections.quota.auto_disable_auth_file')}
+                description={t(
+                  'config_management.visual.sections.quota.auto_disable_auth_file_desc'
+                )}
+                checked={values.quotaAutoDisableAuthFileOnZeroQuota}
+                disabled={disabled}
+                onChange={(quotaAutoDisableAuthFileOnZeroQuota) =>
+                  onChange({ quotaAutoDisableAuthFileOnZeroQuota })
+                }
+              />
             </SectionGrid>
           </ConfigSection>
 
