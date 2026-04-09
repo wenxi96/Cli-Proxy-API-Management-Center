@@ -5,11 +5,12 @@ import type {
   PayloadParamEntry,
   PayloadParamValueType,
   PayloadRule,
+  VisualScopedPoolProviderEntry,
   VisualConfigValues,
   VisualConfigValidationErrors,
   PayloadParamValidationErrorCode,
 } from '@/types/visualConfig';
-import { DEFAULT_VISUAL_VALUES } from '@/types/visualConfig';
+import { DEFAULT_VISUAL_VALUES, makeClientId } from '@/types/visualConfig';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -149,6 +150,22 @@ export function getVisualConfigValidationErrors(
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
+    routingScopedPoolDefaultsLimit: getNonNegativeIntegerError(values.routingScopedPoolDefaultsLimit),
+    routingScopedPoolDefaultsQuotaThresholdPercent: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsQuotaThresholdPercent
+    ),
+    routingScopedPoolDefaultsConsecutiveErrorThreshold: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsConsecutiveErrorThreshold
+    ),
+    routingScopedPoolDefaultsPenaltyWindowSeconds: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsPenaltyWindowSeconds
+    ),
+    routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds
+    ),
+    routingScopedPoolDefaultsIdleLogThrottleSeconds: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsIdleLogThrottleSeconds
+    ),
     'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
     'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
     'streaming.nonstreamKeepaliveInterval': getNonNegativeIntegerError(
@@ -265,6 +282,34 @@ function arePayloadFilterRulesEqual(
   return true;
 }
 
+function areScopedPoolProviderEntriesEqual(
+  left: VisualScopedPoolProviderEntry[],
+  right: VisualScopedPoolProviderEntry[]
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (!a || !b) return false;
+    if (
+      a.provider !== b.provider ||
+      a.enabled !== b.enabled ||
+      a.limit !== b.limit ||
+      a.quotaThresholdPercent !== b.quotaThresholdPercent ||
+      a.consecutiveErrorThreshold !== b.consecutiveErrorThreshold ||
+      a.penaltyWindowSeconds !== b.penaltyWindowSeconds ||
+      a.quotaSnapshotTTLSeconds !== b.quotaSnapshotTTLSeconds ||
+      a.idleLogThrottleSeconds !== b.idleLogThrottleSeconds
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function parsePayloadParamValue(raw: unknown): { valueType: PayloadParamValueType; value: string } {
   if (typeof raw === 'number') {
     return { valueType: 'number', value: String(raw) };
@@ -300,6 +345,80 @@ function parseRawPayloadParamValue(raw: unknown): string {
 function parsePayloadProtocol(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
   return raw.trim() ? raw : undefined;
+}
+
+function parseScopedPoolNumber(raw: unknown): string {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
+  if (typeof raw === 'string' && raw.trim() !== '') return raw.trim();
+  return '';
+}
+
+function parseScopedPoolProviderEntries(raw: unknown): VisualScopedPoolProviderEntry[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+
+  return Object.entries(raw as Record<string, unknown>)
+    .map(([provider, value]) => {
+      const record = asRecord(value) ?? {};
+      const providerKey = String(provider ?? '').trim().toLowerCase();
+      if (!providerKey) return null;
+
+      return {
+        id: makeClientId(),
+        provider: providerKey,
+        enabled: Boolean(record.enabled),
+        limit: parseScopedPoolNumber(record.limit),
+        quotaThresholdPercent: parseScopedPoolNumber(
+          record['quota-threshold-percent'] ?? record.quotaThresholdPercent
+        ),
+        consecutiveErrorThreshold: parseScopedPoolNumber(
+          record['consecutive-error-threshold'] ?? record.consecutiveErrorThreshold
+        ),
+        penaltyWindowSeconds: parseScopedPoolNumber(
+          record['penalty-window-seconds'] ?? record.penaltyWindowSeconds
+        ),
+        quotaSnapshotTTLSeconds: parseScopedPoolNumber(
+          record['quota-snapshot-ttl-seconds'] ?? record.quotaSnapshotTTLSeconds
+        ),
+        idleLogThrottleSeconds: parseScopedPoolNumber(
+          record['idle-log-throttle-seconds'] ?? record.idleLogThrottleSeconds
+        ),
+      } satisfies VisualScopedPoolProviderEntry;
+    })
+    .filter(Boolean) as VisualScopedPoolProviderEntry[];
+}
+
+function serializeScopedPoolProviderEntriesForYaml(
+  entries: VisualScopedPoolProviderEntry[]
+): Record<string, Record<string, unknown>> {
+  const providers: Record<string, Record<string, unknown>> = {};
+
+  entries.forEach((entry) => {
+    const provider = entry.provider.trim().toLowerCase();
+    if (!provider) return;
+
+    const payload: Record<string, unknown> = {
+      enabled: entry.enabled,
+    };
+    if (entry.limit.trim()) payload.limit = Number(entry.limit);
+    if (entry.quotaThresholdPercent.trim()) {
+      payload['quota-threshold-percent'] = Number(entry.quotaThresholdPercent);
+    }
+    if (entry.consecutiveErrorThreshold.trim()) {
+      payload['consecutive-error-threshold'] = Number(entry.consecutiveErrorThreshold);
+    }
+    if (entry.penaltyWindowSeconds.trim()) {
+      payload['penalty-window-seconds'] = Number(entry.penaltyWindowSeconds);
+    }
+    if (entry.quotaSnapshotTTLSeconds.trim()) {
+      payload['quota-snapshot-ttl-seconds'] = Number(entry.quotaSnapshotTTLSeconds);
+    }
+    if (entry.idleLogThrottleSeconds.trim()) {
+      payload['idle-log-throttle-seconds'] = Number(entry.idleLogThrottleSeconds);
+    }
+    providers[provider] = payload;
+  });
+
+  return providers;
 }
 
 function deleteLegacyApiKeysProvider(doc: YamlDocument): void {
@@ -657,6 +776,67 @@ function getNextDirtyFields(
   if (Object.prototype.hasOwnProperty.call(patch, 'routingStrategy')) {
     updateDirty('routingStrategy', nextValues.routingStrategy === baselineValues.routingStrategy);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsLimit')) {
+    updateDirty(
+      'routingScopedPoolDefaultsLimit',
+      nextValues.routingScopedPoolDefaultsLimit === baselineValues.routingScopedPoolDefaultsLimit
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsQuotaThresholdPercent')
+  ) {
+    updateDirty(
+      'routingScopedPoolDefaultsQuotaThresholdPercent',
+      nextValues.routingScopedPoolDefaultsQuotaThresholdPercent ===
+        baselineValues.routingScopedPoolDefaultsQuotaThresholdPercent
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(
+      patch,
+      'routingScopedPoolDefaultsConsecutiveErrorThreshold'
+    )
+  ) {
+    updateDirty(
+      'routingScopedPoolDefaultsConsecutiveErrorThreshold',
+      nextValues.routingScopedPoolDefaultsConsecutiveErrorThreshold ===
+        baselineValues.routingScopedPoolDefaultsConsecutiveErrorThreshold
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsPenaltyWindowSeconds')) {
+    updateDirty(
+      'routingScopedPoolDefaultsPenaltyWindowSeconds',
+      nextValues.routingScopedPoolDefaultsPenaltyWindowSeconds ===
+        baselineValues.routingScopedPoolDefaultsPenaltyWindowSeconds
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds')
+  ) {
+    updateDirty(
+      'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds',
+      nextValues.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds ===
+        baselineValues.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsIdleLogThrottleSeconds')
+  ) {
+    updateDirty(
+      'routingScopedPoolDefaultsIdleLogThrottleSeconds',
+      nextValues.routingScopedPoolDefaultsIdleLogThrottleSeconds ===
+        baselineValues.routingScopedPoolDefaultsIdleLogThrottleSeconds
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolProviders')) {
+    updateDirty(
+      'routingScopedPoolProviders',
+      areScopedPoolProviderEntriesEqual(
+        nextValues.routingScopedPoolProviders,
+        baselineValues.routingScopedPoolProviders
+      )
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'payloadDefaultRules')) {
     updateDirty(
       'payloadDefaultRules',
@@ -792,6 +972,8 @@ export function useVisualConfig() {
       const remoteManagement = asRecord(parsed['remote-management']);
       const quotaExceeded = asRecord(parsed['quota-exceeded']);
       const routing = asRecord(parsed.routing);
+      const scopedPool = asRecord(routing?.['scoped-pool'] ?? routing?.scopedPool);
+      const scopedPoolDefaults = asRecord(scopedPool?.defaults);
       const payload = asRecord(parsed.payload);
       const streaming = asRecord(parsed.streaming);
 
@@ -839,6 +1021,27 @@ export function useVisualConfig() {
         ),
 
         routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
+        routingScopedPoolDefaultsLimit: parseScopedPoolNumber(scopedPoolDefaults?.limit),
+        routingScopedPoolDefaultsQuotaThresholdPercent: parseScopedPoolNumber(
+          scopedPoolDefaults?.['quota-threshold-percent'] ??
+            scopedPoolDefaults?.quotaThresholdPercent
+        ),
+        routingScopedPoolDefaultsConsecutiveErrorThreshold: parseScopedPoolNumber(
+          scopedPoolDefaults?.['consecutive-error-threshold'] ??
+            scopedPoolDefaults?.consecutiveErrorThreshold
+        ),
+        routingScopedPoolDefaultsPenaltyWindowSeconds: parseScopedPoolNumber(
+          scopedPoolDefaults?.['penalty-window-seconds'] ?? scopedPoolDefaults?.penaltyWindowSeconds
+        ),
+        routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: parseScopedPoolNumber(
+          scopedPoolDefaults?.['quota-snapshot-ttl-seconds'] ??
+            scopedPoolDefaults?.quotaSnapshotTTLSeconds
+        ),
+        routingScopedPoolDefaultsIdleLogThrottleSeconds: parseScopedPoolNumber(
+          scopedPoolDefaults?.['idle-log-throttle-seconds'] ??
+            scopedPoolDefaults?.idleLogThrottleSeconds
+        ),
+        routingScopedPoolProviders: parseScopedPoolProviderEntries(scopedPool?.providers),
 
         payloadDefaultRules: parsePayloadRules(payload?.default),
         payloadDefaultRawRules: parseRawPayloadRules(payload?.['default-raw']),
@@ -952,9 +1155,73 @@ export function useVisualConfig() {
           deleteIfMapEmpty(doc, ['quota-exceeded']);
         }
 
-        if (docHas(doc, ['routing']) || values.routingStrategy !== 'round-robin') {
+        const hasScopedPoolDefaults =
+          values.routingScopedPoolDefaultsLimit.trim() ||
+          values.routingScopedPoolDefaultsQuotaThresholdPercent.trim() ||
+          values.routingScopedPoolDefaultsConsecutiveErrorThreshold.trim() ||
+          values.routingScopedPoolDefaultsPenaltyWindowSeconds.trim() ||
+          values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds.trim() ||
+          values.routingScopedPoolDefaultsIdleLogThrottleSeconds.trim();
+        const scopedPoolProviders = serializeScopedPoolProviderEntriesForYaml(
+          values.routingScopedPoolProviders
+        );
+        const hasScopedPoolProviders = Object.keys(scopedPoolProviders).length > 0;
+        const hasScopedPoolConfig = Boolean(hasScopedPoolDefaults || hasScopedPoolProviders);
+
+        if (
+          docHas(doc, ['routing']) ||
+          values.routingStrategy !== 'round-robin' ||
+          hasScopedPoolConfig ||
+          docHas(doc, ['routing', 'scoped-pool'])
+        ) {
           ensureMapInDoc(doc, ['routing']);
           doc.setIn(['routing', 'strategy'], values.routingStrategy);
+          if (hasScopedPoolConfig || docHas(doc, ['routing', 'scoped-pool'])) {
+            ensureMapInDoc(doc, ['routing', 'scoped-pool']);
+
+            if (hasScopedPoolDefaults || docHas(doc, ['routing', 'scoped-pool', 'defaults'])) {
+              ensureMapInDoc(doc, ['routing', 'scoped-pool', 'defaults']);
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'limit'],
+                values.routingScopedPoolDefaultsLimit
+              );
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'quota-threshold-percent'],
+                values.routingScopedPoolDefaultsQuotaThresholdPercent
+              );
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'consecutive-error-threshold'],
+                values.routingScopedPoolDefaultsConsecutiveErrorThreshold
+              );
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'penalty-window-seconds'],
+                values.routingScopedPoolDefaultsPenaltyWindowSeconds
+              );
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'quota-snapshot-ttl-seconds'],
+                values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds
+              );
+              setIntFromStringInDoc(
+                doc,
+                ['routing', 'scoped-pool', 'defaults', 'idle-log-throttle-seconds'],
+                values.routingScopedPoolDefaultsIdleLogThrottleSeconds
+              );
+              deleteIfMapEmpty(doc, ['routing', 'scoped-pool', 'defaults']);
+            }
+
+            if (hasScopedPoolProviders) {
+              doc.setIn(['routing', 'scoped-pool', 'providers'], scopedPoolProviders);
+            } else if (docHas(doc, ['routing', 'scoped-pool', 'providers'])) {
+              doc.deleteIn(['routing', 'scoped-pool', 'providers']);
+            }
+
+            deleteIfMapEmpty(doc, ['routing', 'scoped-pool']);
+          }
           deleteIfMapEmpty(doc, ['routing']);
         }
 

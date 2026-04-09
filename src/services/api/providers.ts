@@ -13,8 +13,10 @@ import type {
   OpenAIProviderConfig,
   ProviderKeyConfig,
   ApiKeyEntry,
-  ModelAlias
+  ModelAlias,
+  ScopedPoolStatusResponse,
 } from '@/types';
+import { normalizeScopedPoolStatusResponse } from '@/utils/scopedPool';
 
 const serializeHeaders = (headers?: Record<string, string>) => (headers && Object.keys(headers).length ? headers : undefined);
 
@@ -221,5 +223,10 @@ export const providersApi = {
     apiClient.patch('/openai-compatibility', { index, value: serializeOpenAIProvider(value) }),
 
   deleteOpenAIProvider: (name: string) =>
-    apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`)
+    apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`),
+
+  async getScopedPoolStatus(): Promise<ScopedPoolStatusResponse> {
+    const data = await apiClient.get('/routing/scoped-pool/status');
+    return normalizeScopedPoolStatusResponse(data);
+  }
 };

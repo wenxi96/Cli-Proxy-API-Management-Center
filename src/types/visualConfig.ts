@@ -4,12 +4,26 @@ export type PayloadParamValidationErrorCode =
   | 'payload_invalid_boolean'
   | 'payload_invalid_json';
 
+export type VisualScopedPoolNumericField =
+  | 'limit'
+  | 'quotaThresholdPercent'
+  | 'consecutiveErrorThreshold'
+  | 'penaltyWindowSeconds'
+  | 'quotaSnapshotTTLSeconds'
+  | 'idleLogThrottleSeconds';
+
 export type VisualConfigFieldPath =
   | 'port'
   | 'logsMaxTotalSizeMb'
   | 'requestRetry'
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
+  | 'routingScopedPoolDefaultsLimit'
+  | 'routingScopedPoolDefaultsQuotaThresholdPercent'
+  | 'routingScopedPoolDefaultsConsecutiveErrorThreshold'
+  | 'routingScopedPoolDefaultsPenaltyWindowSeconds'
+  | 'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds'
+  | 'routingScopedPoolDefaultsIdleLogThrottleSeconds'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
   | 'streaming.nonstreamKeepaliveInterval';
@@ -51,6 +65,18 @@ export interface StreamingConfig {
   nonstreamKeepaliveInterval: string;
 }
 
+export interface VisualScopedPoolProviderEntry {
+  id: string;
+  provider: string;
+  enabled: boolean;
+  limit: string;
+  quotaThresholdPercent: string;
+  consecutiveErrorThreshold: string;
+  penaltyWindowSeconds: string;
+  quotaSnapshotTTLSeconds: string;
+  idleLogThrottleSeconds: string;
+}
+
 export type VisualConfigValues = {
   host: string;
   port: string;
@@ -77,6 +103,13 @@ export type VisualConfigValues = {
   quotaSwitchPreviewModel: boolean;
   quotaAutoDisableAuthFileOnZeroQuota: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
+  routingScopedPoolDefaultsLimit: string;
+  routingScopedPoolDefaultsQuotaThresholdPercent: string;
+  routingScopedPoolDefaultsConsecutiveErrorThreshold: string;
+  routingScopedPoolDefaultsPenaltyWindowSeconds: string;
+  routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: string;
+  routingScopedPoolDefaultsIdleLogThrottleSeconds: string;
+  routingScopedPoolProviders: VisualScopedPoolProviderEntry[];
   wsAuth: boolean;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
@@ -117,6 +150,13 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchPreviewModel: true,
   quotaAutoDisableAuthFileOnZeroQuota: false,
   routingStrategy: 'round-robin',
+  routingScopedPoolDefaultsLimit: '',
+  routingScopedPoolDefaultsQuotaThresholdPercent: '',
+  routingScopedPoolDefaultsConsecutiveErrorThreshold: '',
+  routingScopedPoolDefaultsPenaltyWindowSeconds: '',
+  routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: '',
+  routingScopedPoolDefaultsIdleLogThrottleSeconds: '',
+  routingScopedPoolProviders: [],
   wsAuth: false,
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],

@@ -12,6 +12,21 @@ export interface QuotaExceededConfig {
   autoDisableAuthFileOnZeroQuota?: boolean;
 }
 
+export interface RoutingScopedPoolProviderConfig {
+  enabled?: boolean;
+  limit?: number;
+  quotaThresholdPercent?: number;
+  consecutiveErrorThreshold?: number;
+  penaltyWindowSeconds?: number;
+  quotaSnapshotTTLSeconds?: number;
+  idleLogThrottleSeconds?: number;
+}
+
+export interface RoutingScopedPoolConfig {
+  defaults?: RoutingScopedPoolProviderConfig;
+  providers?: Record<string, RoutingScopedPoolProviderConfig>;
+}
+
 export interface Config {
   debug?: boolean;
   proxyUrl?: string;
@@ -24,6 +39,7 @@ export interface Config {
   wsAuth?: boolean;
   forceModelPrefix?: boolean;
   routingStrategy?: string;
+  routingScopedPool?: RoutingScopedPoolConfig;
   apiKeys?: string[];
   ampcode?: AmpcodeConfig;
   geminiApiKeys?: GeminiKeyConfig[];
@@ -47,6 +63,7 @@ export type RawConfigSection =
   | 'ws-auth'
   | 'force-model-prefix'
   | 'routing/strategy'
+  | 'routing/scoped-pool'
   | 'api-keys'
   | 'ampcode'
   | 'gemini-api-key'

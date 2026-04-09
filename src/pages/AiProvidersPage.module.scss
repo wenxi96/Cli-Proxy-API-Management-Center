@@ -98,6 +98,65 @@
   border-color: var(--failure-badge-border);
 }
 
+.scopedPoolSummaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.scopedPoolSummaryHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.scopedPoolBadgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.scopedPoolBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  border: 1px solid transparent;
+}
+
+.scopedPoolBadgeSuccess {
+  color: var(--success-badge-text, #065f46);
+  background: color-mix(in srgb, var(--success-badge-bg, #d1fae5) 58%, transparent);
+}
+
+.scopedPoolBadgeWarning {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 62%, transparent);
+}
+
+.scopedPoolBadgeDanger {
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+}
+
+.scopedPoolBadgeMuted {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+}
+
+.scopedPoolBadgeOutline {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--border-color) 78%, transparent);
+  background: transparent;
+}
+
 // 字段行样式：标签 + 值
 .fieldRow {
   display: flex;

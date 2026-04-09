@@ -5,7 +5,11 @@ import { Card } from '@/components/ui/Card';
 import { IconCheck, IconX } from '@/components/ui/icons';
 import iconOpenaiLight from '@/assets/icons/openai-light.svg';
 import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
-import type { OpenAIProviderConfig } from '@/types';
+import type {
+  OpenAIProviderConfig,
+  ScopedPoolAuthRuntimeStatus,
+  ScopedPoolProviderRuntimeStatus,
+} from '@/types';
 import { maskApiKey } from '@/utils/format';
 import {
   buildCandidateUsageSourceIds,
@@ -15,6 +19,7 @@ import {
 import { collectUsageDetailsForCandidates, type UsageDetailsBySource } from '@/utils/usageIndex';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
+import { ScopedPoolAuthBadge } from '../ScopedPoolAuthBadge';
 import { ProviderStatusBar } from '../ProviderStatusBar';
 import { getOpenAIProviderStats, getStatsBySource } from '../utils';
 
@@ -26,6 +31,8 @@ interface OpenAISectionProps {
   disableControls: boolean;
   isSwitching: boolean;
   resolvedTheme: string;
+  scopedPoolSummaries: Map<string, ScopedPoolProviderRuntimeStatus>;
+  scopedPoolEntryStatuses: Map<string, Map<number, ScopedPoolAuthRuntimeStatus>>;
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
@@ -39,6 +46,8 @@ export function OpenAISection({
   disableControls,
   isSwitching,
   resolvedTheme,
+  scopedPoolSummaries,
+  scopedPoolEntryStatuses,
   onAdd,
   onEdit,
   onDelete,
@@ -98,10 +107,36 @@ export function OpenAISection({
             const headerEntries = Object.entries(item.headers || {});
             const apiKeyEntries = item.apiKeyEntries || [];
             const statusData = statusBarCache.get(item.name) || calculateStatusBarData([]);
+            const scopedPoolSummary = scopedPoolSummaries.get(item.name);
+            const scopedPoolEntryStatus = scopedPoolEntryStatuses.get(item.name);
 
             return (
               <Fragment>
                 <div className="item-title">{item.name}</div>
+                {scopedPoolSummary?.configured ? (
+                  <div className={styles.scopedPoolSummaryRow}>
+                    <span
+                      className={`${styles.scopedPoolBadge} ${
+                        scopedPoolSummary.effective
+                          ? styles.scopedPoolBadgeSuccess
+                          : styles.scopedPoolBadgeMuted
+                      }`}
+                    >
+                      {scopedPoolSummary.effective
+                        ? t('ai_providers.scoped_pool_summary_effective')
+                        : t('ai_providers.scoped_pool_summary_configured')}
+                    </span>
+                    <span className={styles.scopedPoolSummaryHint}>
+                      {t('ai_providers.scoped_pool_summary_counts', {
+                        active: scopedPoolSummary.activeCount,
+                        limit: scopedPoolSummary.limit,
+                        standby: scopedPoolSummary.standbyCount,
+                        penalized: scopedPoolSummary.penalizedCount,
+                        ejected: scopedPoolSummary.ejectedCount,
+                      })}
+                    </span>
+                  </div>
+                ) : null}
                 {item.priority !== undefined && (
                   <div className={styles.fieldRow}>
                     <span className={styles.fieldLabel}>{t('common.priority')}:</span>
@@ -135,6 +170,7 @@ export function OpenAISection({
                     <div className={styles.apiKeyEntryList}>
                       {apiKeyEntries.map((entry, entryIndex) => {
                         const entryStats = getStatsBySource(entry.apiKey, keyStats);
+                        const entryPoolStatus = scopedPoolEntryStatus?.get(entryIndex) ?? null;
                         return (
                           <div key={entryIndex} className={styles.apiKeyEntryCard}>
                             <span className={styles.apiKeyEntryIndex}>{entryIndex + 1}</span>
@@ -154,6 +190,7 @@ export function OpenAISection({
                                 <IconX size={12} /> {entryStats.failure}
                               </span>
                             </div>
+                            <ScopedPoolAuthBadge status={entryPoolStatus} />
                           </div>
                         );
                       })}
