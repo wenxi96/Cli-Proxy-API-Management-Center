@@ -11,6 +11,10 @@ import type {
 } from '@/types';
 import type { Config } from '@/types/config';
 import { buildHeaderObject } from '@/utils/headers';
+import type {
+  RoutingScopedPoolConfig,
+  RoutingScopedPoolProviderConfig,
+} from '@/types/config';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -25,6 +29,15 @@ const normalizeBoolean = (value: unknown): boolean | undefined => {
     if (['false', '0', 'no', 'n', 'off'].includes(trimmed)) return false;
   }
   return Boolean(value);
+};
+
+const normalizeNumericField = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 };
 
 const normalizeModelAliases = (models: unknown): ModelAlias[] => {
@@ -339,6 +352,84 @@ const normalizeAmpcodeConfig = (payload: unknown): AmpcodeConfig | undefined => 
   return config;
 };
 
+const normalizeScopedPoolProviderConfig = (
+  payload: unknown
+): RoutingScopedPoolProviderConfig | undefined => {
+  if (!isRecord(payload)) return undefined;
+
+  const result: RoutingScopedPoolProviderConfig = {};
+  const enabled = normalizeBoolean(payload.enabled);
+  if (enabled !== undefined) result.enabled = enabled;
+
+  const limit = normalizeNumericField(payload.limit);
+  if (limit !== undefined) result.limit = limit;
+
+  const quotaThresholdPercent = normalizeNumericField(
+    payload['quota-threshold-percent'] ?? payload.quotaThresholdPercent
+  );
+  if (quotaThresholdPercent !== undefined) {
+    result.quotaThresholdPercent = quotaThresholdPercent;
+  }
+
+  const consecutiveErrorThreshold = normalizeNumericField(
+    payload['consecutive-error-threshold'] ?? payload.consecutiveErrorThreshold
+  );
+  if (consecutiveErrorThreshold !== undefined) {
+    result.consecutiveErrorThreshold = consecutiveErrorThreshold;
+  }
+
+  const penaltyWindowSeconds = normalizeNumericField(
+    payload['penalty-window-seconds'] ?? payload.penaltyWindowSeconds
+  );
+  if (penaltyWindowSeconds !== undefined) {
+    result.penaltyWindowSeconds = penaltyWindowSeconds;
+  }
+
+  const quotaSnapshotTTLSeconds = normalizeNumericField(
+    payload['quota-snapshot-ttl-seconds'] ?? payload.quotaSnapshotTTLSeconds
+  );
+  if (quotaSnapshotTTLSeconds !== undefined) {
+    result.quotaSnapshotTTLSeconds = quotaSnapshotTTLSeconds;
+  }
+
+  const idleLogThrottleSeconds = normalizeNumericField(
+    payload['idle-log-throttle-seconds'] ?? payload.idleLogThrottleSeconds
+  );
+  if (idleLogThrottleSeconds !== undefined) {
+    result.idleLogThrottleSeconds = idleLogThrottleSeconds;
+  }
+
+  return Object.keys(result).length ? result : undefined;
+};
+
+export const normalizeRoutingScopedPoolConfig = (
+  payload: unknown
+): RoutingScopedPoolConfig | undefined => {
+  if (!isRecord(payload)) return undefined;
+
+  const result: RoutingScopedPoolConfig = {};
+  const defaults = normalizeScopedPoolProviderConfig(payload.defaults);
+  if (defaults) {
+    result.defaults = defaults;
+  }
+
+  if (isRecord(payload.providers)) {
+    const providers: Record<string, RoutingScopedPoolProviderConfig> = {};
+    Object.entries(payload.providers).forEach(([provider, config]) => {
+      const key = String(provider ?? '').trim().toLowerCase();
+      if (!key) return;
+      const normalized = normalizeScopedPoolProviderConfig(config);
+      if (!normalized) return;
+      providers[key] = normalized;
+    });
+    if (Object.keys(providers).length) {
+      result.providers = providers;
+    }
+  }
+
+  return Object.keys(result).length ? result : undefined;
+};
+
 /**
  * 规范化 /config 返回值
  */
@@ -395,6 +486,12 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
     : (raw['routing-strategy'] ?? raw.routingStrategy);
   if (strategyRaw !== undefined && strategyRaw !== null) {
     config.routingStrategy = String(strategyRaw);
+  }
+  const routingScopedPool = normalizeRoutingScopedPoolConfig(
+    isRecord(routing) ? routing['scoped-pool'] ?? routing.scopedPool : raw['scoped-pool']
+  );
+  if (routingScopedPool) {
+    config.routingScopedPool = routingScopedPool;
   }
   const apiKeysRaw = raw['api-keys'] ?? raw.apiKeys;
   if (Array.isArray(apiKeysRaw)) {

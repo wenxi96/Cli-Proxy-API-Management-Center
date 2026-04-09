@@ -4,7 +4,8 @@
 
 import { apiClient } from './client';
 import type { Config } from '@/types';
-import { normalizeConfigResponse } from './transformers';
+import { normalizeConfigResponse, normalizeRoutingScopedPoolConfig } from './transformers';
+import type { RoutingScopedPoolConfig } from '@/types/config';
 
 export const configApi = {
   /**
@@ -121,4 +122,13 @@ export const configApi = {
    * 更新路由策略
    */
   updateRoutingStrategy: (strategy: string) => apiClient.put('/routing/strategy', { value: strategy }),
+
+  async getRoutingScopedPool(): Promise<RoutingScopedPoolConfig | undefined> {
+    const data = await apiClient.get<Record<string, unknown>>('/routing/scoped-pool');
+    const payload = data?.['scoped-pool'] ?? data?.scopedPool;
+    return normalizeRoutingScopedPoolConfig(payload);
+  },
+
+  updateRoutingScopedPool: (value: RoutingScopedPoolConfig) =>
+    apiClient.put('/routing/scoped-pool', { value }),
 };

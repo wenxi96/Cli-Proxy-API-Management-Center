@@ -30,6 +30,19 @@ export interface AuthFileItem {
   statusMessage?: string;
   lastRefresh?: string | number;
   modified?: number;
+  poolConfigured?: boolean;
+  poolEnabled?: boolean;
+  inPool?: boolean;
+  poolState?: string;
+  poolReason?: string;
+  poolSupportsQuotaCheck?: boolean;
+  poolRemainingPercent?: number;
+  poolLastQuotaCheckedAt?: string | number;
+  poolConsecutiveErrors?: number;
+  poolRecentTimeoutCount?: number;
+  poolPenaltyScore?: number;
+  poolPenaltyUntil?: string | number;
+  poolLastSelectedAt?: string | number;
   [key: string]: unknown;
 }
 

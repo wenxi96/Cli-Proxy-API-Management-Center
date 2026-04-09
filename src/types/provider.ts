@@ -57,3 +57,76 @@ export interface OpenAIProviderConfig {
   testModel?: string;
   [key: string]: unknown;
 }
+
+export type ScopedPoolState =
+  | 'unmanaged'
+  | 'in_pool'
+  | 'standby'
+  | 'penalized'
+  | 'ejected'
+  | 'disabled';
+
+export type ScopedPoolReason =
+  | ''
+  | 'healthy'
+  | 'pool_full'
+  | 'not_enabled'
+  | 'strategy_incompatible'
+  | 'disabled'
+  | 'unavailable'
+  | 'penalty_window'
+  | 'consecutive_errors'
+  | 'request_timeout'
+  | 'low_quota';
+
+export interface ScopedPoolAuthRuntimeStatus {
+  authId: string;
+  authIndex?: string;
+  provider: string;
+  configured: boolean;
+  poolEnabled: boolean;
+  inPool: boolean;
+  state: ScopedPoolState | string;
+  reason?: ScopedPoolReason | string;
+  runtimeOnly?: boolean;
+  disabled?: boolean;
+  supportsQuotaCheck?: boolean;
+  remainingPercent?: number;
+  lastQuotaCheckedAt?: string;
+  consecutiveErrors?: number;
+  recentTimeoutCount?: number;
+  penaltyScore?: number;
+  penaltyUntil?: string;
+  lastSelectedAt?: string;
+  lastPoolEventAt?: string;
+  lastTransitionAt?: string;
+}
+
+export interface ScopedPoolProviderRuntimeStatus {
+  provider: string;
+  configured: boolean;
+  effective: boolean;
+  reason?: ScopedPoolReason | string;
+  limit: number;
+  candidateCount: number;
+  activeCount: number;
+  standbyCount: number;
+  penalizedCount: number;
+  ejectedCount: number;
+  disabledCount: number;
+  activeAuthIds: string[];
+  auths: Record<string, ScopedPoolAuthRuntimeStatus>;
+}
+
+export interface ScopedPoolStatusResponse {
+  strategy: string;
+  generated: boolean;
+  generatedAt?: string;
+  providers: Record<string, ScopedPoolProviderRuntimeStatus>;
+  auths: Record<string, ScopedPoolAuthRuntimeStatus>;
+}
+
+export interface OpenAIProviderEntryScopedPoolStatus {
+  providerStatus?: ScopedPoolProviderRuntimeStatus;
+  authStatus?: ScopedPoolAuthRuntimeStatus;
+}

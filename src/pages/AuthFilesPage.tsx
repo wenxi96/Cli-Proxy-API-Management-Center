@@ -178,6 +178,7 @@ export function AuthFilesPage() {
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
+  const [enabledOnly, setEnabledOnly] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -312,6 +313,9 @@ export function AuthFilesPage() {
       if (typeof persisted.problemOnly === 'boolean') {
         setProblemOnly(persisted.problemOnly);
       }
+      if (typeof persisted.enabledOnly === 'boolean') {
+        setEnabledOnly(persisted.enabledOnly);
+      }
       if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
@@ -357,6 +361,7 @@ export function AuthFilesPage() {
     writeAuthFilesUiState({
       filter,
       problemOnly,
+      enabledOnly,
       compactMode,
       search,
       page,
@@ -370,6 +375,7 @@ export function AuthFilesPage() {
   }, [
     batchCheckConcurrency,
     compactMode,
+    enabledOnly,
     filter,
     page,
     pageSize,
@@ -474,9 +480,15 @@ export function AuthFilesPage() {
     return Array.from(types);
   }, [files]);
 
+  const filesMatchingViewFilters = useMemo(
+    () => (enabledOnly ? files.filter((file) => file.disabled !== true) : files),
+    [enabledOnly, files]
+  );
+
   const filesMatchingProblemFilter = useMemo(
-    () => (problemOnly ? files.filter(hasAuthFileStatusMessage) : files),
-    [files, problemOnly]
+    () =>
+      problemOnly ? filesMatchingViewFilters.filter(hasAuthFileStatusMessage) : filesMatchingViewFilters,
+    [filesMatchingViewFilters, problemOnly]
   );
 
   const sortOptions = useMemo(
@@ -1366,6 +1378,21 @@ export function AuthFilesPage() {
                         label={
                           <span className={styles.filterToggleLabel}>
                             {t('auth_files.problem_filter_only')}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className={styles.filterToggleCard}>
+                      <ToggleSwitch
+                        checked={enabledOnly}
+                        onChange={(value) => {
+                          setEnabledOnly(value);
+                          setPage(1);
+                        }}
+                        ariaLabel={t('auth_files.enabled_filter_only')}
+                        label={
+                          <span className={styles.filterToggleLabel}>
+                            {t('auth_files.enabled_filter_only')}
                           </span>
                         }
                       />

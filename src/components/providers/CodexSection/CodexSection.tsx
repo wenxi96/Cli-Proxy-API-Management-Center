@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import iconCodex from '@/assets/icons/codex.svg';
-import type { ProviderKeyConfig } from '@/types';
+import type {
+  ProviderKeyConfig,
+  ScopedPoolAuthRuntimeStatus,
+  ScopedPoolProviderRuntimeStatus,
+} from '@/types';
 import { maskApiKey } from '@/utils/format';
 import {
   buildCandidateUsageSourceIds,
@@ -17,6 +21,7 @@ import {
 } from '@/utils/usageIndex';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
+import { ScopedPoolAuthBadge } from '../ScopedPoolAuthBadge';
 import { ProviderStatusBar } from '../ProviderStatusBar';
 import { getStatsBySource, hasDisableAllModelsRule } from '../utils';
 
@@ -27,6 +32,8 @@ interface CodexSectionProps {
   loading: boolean;
   disableControls: boolean;
   isSwitching: boolean;
+  scopedPoolSummary?: ScopedPoolProviderRuntimeStatus;
+  scopedPoolStatuses: Map<number, ScopedPoolAuthRuntimeStatus>;
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
@@ -40,6 +47,8 @@ export function CodexSection({
   loading,
   disableControls,
   isSwitching,
+  scopedPoolSummary,
+  scopedPoolStatuses,
   onAdd,
   onEdit,
   onDelete,
@@ -83,6 +92,30 @@ export function CodexSection({
           </Button>
         }
       >
+        {scopedPoolSummary?.configured ? (
+          <div className={styles.scopedPoolSummaryRow}>
+            <span
+              className={`${styles.scopedPoolBadge} ${
+                scopedPoolSummary.effective
+                  ? styles.scopedPoolBadgeSuccess
+                  : styles.scopedPoolBadgeMuted
+              }`}
+            >
+              {scopedPoolSummary.effective
+                ? t('ai_providers.scoped_pool_summary_effective')
+                : t('ai_providers.scoped_pool_summary_configured')}
+            </span>
+            <span className={styles.scopedPoolSummaryHint}>
+              {t('ai_providers.scoped_pool_summary_counts', {
+                active: scopedPoolSummary.activeCount,
+                limit: scopedPoolSummary.limit,
+                standby: scopedPoolSummary.standbyCount,
+                penalized: scopedPoolSummary.penalizedCount,
+                ejected: scopedPoolSummary.ejectedCount,
+              })}
+            </span>
+          </div>
+        ) : null}
         <ProviderList<ProviderKeyConfig>
           items={configs}
           loading={loading}
@@ -101,7 +134,7 @@ export function CodexSection({
               onChange={(value) => void onToggle(index, value)}
             />
           )}
-          renderContent={(item) => {
+          renderContent={(item, index) => {
             const stats = getStatsBySource(item.apiKey, keyStats, item.prefix);
             const headerEntries = Object.entries(item.headers || {});
             const configDisabled = hasDisableAllModelsRule(item.excludedModels);
@@ -188,6 +221,7 @@ export function CodexSection({
                     </div>
                   </div>
                 ) : null}
+                <ScopedPoolAuthBadge status={scopedPoolStatuses.get(index) ?? null} />
                 <div className={styles.cardStats}>
                   <span className={`${styles.statPill} ${styles.statSuccess}`}>
                     {t('stats.success')}: {stats.success}

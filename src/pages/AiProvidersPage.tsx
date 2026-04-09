@@ -19,7 +19,16 @@ import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer'
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { ampcodeApi, providersApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore, useThemeStore } from '@/stores';
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type {
+  GeminiKeyConfig,
+  OpenAIProviderConfig,
+  ProviderKeyConfig,
+  ScopedPoolStatusResponse,
+} from '@/types';
+import {
+  buildScopedPoolBindings,
+  createEmptyScopedPoolBindings,
+} from '@/utils/scopedPool';
 import { indexUsageDetailsBySource } from '@/utils/usageIndex';
 import styles from './AiProvidersPage.module.scss';
 
@@ -57,6 +66,8 @@ export function AiProvidersPage() {
   );
 
   const [configSwitchingKey, setConfigSwitchingKey] = useState<string | null>(null);
+  const [scopedPoolStatus, setScopedPoolStatus] = useState<ScopedPoolStatusResponse | null>(null);
+  const [scopedPoolBindings, setScopedPoolBindings] = useState(createEmptyScopedPoolBindings);
 
   const disableControls = connectionStatus !== 'connected';
   const isSwitching = Boolean(configSwitchingKey);
@@ -90,6 +101,7 @@ export function AiProvidersPage() {
         providersApi.getVertexConfigs(),
         ampcodeApi.getAmpcode(),
       ]);
+      const scopedPoolResult = await Promise.allSettled([providersApi.getScopedPoolStatus()]);
 
       if (configResult.status !== 'fulfilled') {
         throw configResult.reason;
@@ -111,6 +123,13 @@ export function AiProvidersPage() {
       if (ampcodeResult.status === 'fulfilled') {
         updateConfigValue('ampcode', ampcodeResult.value);
         clearCache('ampcode');
+      }
+
+      const scopedPoolValue = scopedPoolResult[0];
+      if (scopedPoolValue.status === 'fulfilled') {
+        setScopedPoolStatus(scopedPoolValue.value);
+      } else {
+        setScopedPoolStatus(null);
       }
     } catch (err: unknown) {
       const message = getErrorMessage(err) || t('notification.refresh_failed');
@@ -145,7 +164,35 @@ export function AiProvidersPage() {
     config?.openaiCompatibility,
   ]);
 
-  useHeaderRefresh(refreshKeyStats, isCurrentLayer);
+  useEffect(() => {
+    let active = true;
+
+    void buildScopedPoolBindings(scopedPoolStatus, {
+      geminiKeys,
+      codexConfigs,
+      claudeConfigs,
+      vertexConfigs,
+      openaiProviders,
+    })
+      .then((bindings) => {
+        if (!active) return;
+        setScopedPoolBindings(bindings);
+      })
+      .catch(() => {
+        if (!active) return;
+        setScopedPoolBindings(createEmptyScopedPoolBindings());
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [claudeConfigs, codexConfigs, geminiKeys, openaiProviders, scopedPoolStatus, vertexConfigs]);
+
+  const handleHeaderRefresh = useCallback(async () => {
+    await Promise.all([refreshKeyStats(), loadConfigs()]);
+  }, [loadConfigs, refreshKeyStats]);
+
+  useHeaderRefresh(handleHeaderRefresh, isCurrentLayer);
 
   const openEditor = useCallback(
     (path: string) => {
@@ -374,14 +421,16 @@ export function AiProvidersPage() {
         {error && <div className="error-box">{error}</div>}
 
         <div id="provider-gemini">
-          <GeminiSection
-            configs={geminiKeys}
-            keyStats={keyStats}
-            usageDetailsBySource={usageDetailsBySource}
-            loading={loading}
-            disableControls={disableControls}
-            isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/gemini/new')}
+        <GeminiSection
+          configs={geminiKeys}
+          keyStats={keyStats}
+          usageDetailsBySource={usageDetailsBySource}
+          loading={loading}
+          disableControls={disableControls}
+          isSwitching={isSwitching}
+          scopedPoolSummary={scopedPoolStatus?.providers?.gemini}
+          scopedPoolStatuses={scopedPoolBindings.gemini}
+          onAdd={() => openEditor('/ai-providers/gemini/new')}
             onEdit={(index) => openEditor(`/ai-providers/gemini/${index}`)}
             onDelete={deleteGemini}
             onToggle={(index, enabled) => void setConfigEnabled('gemini', index, enabled)}
@@ -389,14 +438,16 @@ export function AiProvidersPage() {
         </div>
 
         <div id="provider-codex">
-          <CodexSection
-            configs={codexConfigs}
+        <CodexSection
+          configs={codexConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
             loading={loading}
-            disableControls={disableControls}
-            isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/codex/new')}
+          disableControls={disableControls}
+          isSwitching={isSwitching}
+          scopedPoolSummary={scopedPoolStatus?.providers?.codex}
+          scopedPoolStatuses={scopedPoolBindings.codex}
+          onAdd={() => openEditor('/ai-providers/codex/new')}
             onEdit={(index) => openEditor(`/ai-providers/codex/${index}`)}
             onDelete={(index) => void deleteProviderEntry('codex', index)}
             onToggle={(index, enabled) => void setConfigEnabled('codex', index, enabled)}
@@ -404,14 +455,16 @@ export function AiProvidersPage() {
         </div>
 
         <div id="provider-claude">
-          <ClaudeSection
-            configs={claudeConfigs}
+        <ClaudeSection
+          configs={claudeConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
             loading={loading}
-            disableControls={disableControls}
-            isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/claude/new')}
+          disableControls={disableControls}
+          isSwitching={isSwitching}
+          scopedPoolSummary={scopedPoolStatus?.providers?.claude}
+          scopedPoolStatuses={scopedPoolBindings.claude}
+          onAdd={() => openEditor('/ai-providers/claude/new')}
             onEdit={(index) => openEditor(`/ai-providers/claude/${index}`)}
             onDelete={(index) => void deleteProviderEntry('claude', index)}
             onToggle={(index, enabled) => void setConfigEnabled('claude', index, enabled)}
@@ -419,14 +472,16 @@ export function AiProvidersPage() {
         </div>
 
         <div id="provider-vertex">
-          <VertexSection
-            configs={vertexConfigs}
+        <VertexSection
+          configs={vertexConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
             loading={loading}
-            disableControls={disableControls}
-            isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/vertex/new')}
+          disableControls={disableControls}
+          isSwitching={isSwitching}
+          scopedPoolSummary={scopedPoolStatus?.providers?.vertex}
+          scopedPoolStatuses={scopedPoolBindings.vertex}
+          onAdd={() => openEditor('/ai-providers/vertex/new')}
             onEdit={(index) => openEditor(`/ai-providers/vertex/${index}`)}
             onDelete={deleteVertex}
             onToggle={(index, enabled) => void setConfigEnabled('vertex', index, enabled)}
@@ -444,15 +499,17 @@ export function AiProvidersPage() {
         </div>
 
         <div id="provider-openai">
-          <OpenAISection
-            configs={openaiProviders}
+        <OpenAISection
+          configs={openaiProviders}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
             loading={loading}
-            disableControls={disableControls}
-            isSwitching={isSwitching}
-            resolvedTheme={resolvedTheme}
-            onAdd={() => openEditor('/ai-providers/openai/new')}
+          disableControls={disableControls}
+          isSwitching={isSwitching}
+          resolvedTheme={resolvedTheme}
+          scopedPoolSummaries={scopedPoolBindings.openaiProviders}
+          scopedPoolEntryStatuses={scopedPoolBindings.openaiEntries}
+          onAdd={() => openEditor('/ai-providers/openai/new')}
             onEdit={(index) => openEditor(`/ai-providers/openai/${index}`)}
             onDelete={deleteOpenai}
           />
