@@ -52,9 +52,8 @@ jobs:
             [[ "${tag}" == \#* ]] && continue
 
             echo "Cleaning ${tag}"
-            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.id' 2>/dev/null || true)"
-            if [[ -n "${release_id}" ]]; then
-              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              gh release delete "${tag}" --yes --cleanup-tag
             fi
 
             git tag -d "${tag}" >/dev/null 2>&1 || true
@@ -90,6 +89,11 @@ jobs:
               VERSION="${version}" npm run build
               mv dist/index.html dist/management.html
             )
+
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              gh release delete "${tag}" --yes --cleanup-tag
+            fi
+            git push origin ":refs/tags/${tag}" >/dev/null 2>&1 || true
 
             gh release create "${tag}" \
               "${build_dir}/dist/management.html" \
