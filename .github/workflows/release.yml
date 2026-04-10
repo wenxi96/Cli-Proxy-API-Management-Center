@@ -7,9 +7,21 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_bump:
+        description: Release bump mode for manual runs
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - preserve
+          - minor
+          - major
 
 jobs:
   build-and-release:
+    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[skip release]')
     runs-on: ubuntu-latest
 
     permissions:
@@ -43,6 +55,8 @@ jobs:
       - name: Determine release metadata
         id: meta
         shell: bash
+        env:
+          RELEASE_BUMP: ${{ inputs.release_bump }}
         run: |
           set -euo pipefail
 
