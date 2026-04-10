@@ -53,11 +53,11 @@ jobs:
             build_version="${VERSION}"
             release_kind="tag"
           else
-            eval "$(bash ./scripts/version.sh snapshot | sed 's/^/export /')"
-            release_tag="${SNAPSHOT_TAG}"
-            release_name="${SNAPSHOT_NAME}"
+            eval "$(bash ./scripts/version.sh auto-release | sed 's/^/export /')"
+            release_tag="${RELEASE_TAG}"
+            release_name="${RELEASE_NAME}"
             build_version="${VERSION}"
-            release_kind="snapshot"
+            release_kind="auto-release"
           fi
 
           {

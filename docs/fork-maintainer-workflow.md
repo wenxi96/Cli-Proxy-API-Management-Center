@@ -80,7 +80,7 @@ git merge dev
 git push origin master
 ```
 
-### 6. Let `master` publish snapshot releases automatically
+### 6. Let `master` publish formal releases automatically
 
 ```bash
 git checkout master
@@ -88,8 +88,9 @@ git pull origin master
 git push origin master
 ```
 
-Every push to `master` now triggers `.github/workflows/release.yml` and publishes a snapshot release tagged `master-<short_sha>`.
-That snapshot release uploads the latest built `management.html`, so backend forks that track `releases/latest` can pull the newest validated frontend automatically.
+Every push to `master` now triggers `.github/workflows/release.yml` and publishes the next formal fork release for the current upstream baseline.
+If upstream has not changed, the workflow automatically increments the fork version suffix such as `v1.7.30-wx.1.0`, `v1.7.30-wx.1.1`, and `v1.7.30-wx.1.2`.
+That release uploads the latest built `management.html`, so backend forks that track `releases/latest` can pull the newest validated frontend automatically.
 
 ### 7. Create formal versioned releases only from `master`
 
@@ -127,7 +128,7 @@ If you want bare `git pull` to track `upstream/main`, you must configure `branch
 
 - Do not develop directly on `main`.
 - Do not use `master` for unfinished work.
-- Every validated `master` push will publish a snapshot `management.html` release automatically.
+- Every validated `master` push will publish the next formal `management.html` release automatically.
 - Create formal `v*` release tags only from validated `master` commits.
 - Keep `feature/*` branches short-lived.
 - Treat `master` as "validated frontend state", not "latest upstream state".

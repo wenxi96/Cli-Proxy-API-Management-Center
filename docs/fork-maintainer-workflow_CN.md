@@ -80,7 +80,7 @@ git merge dev
 git push origin master
 ```
 
-### 6. 让 `master` 自动发布快照 release
+### 6. 让 `master` 自动发布正式 release
 
 ```bash
 git checkout master
@@ -88,8 +88,9 @@ git pull origin master
 git push origin master
 ```
 
-现在每次推送到 `master`，都会自动触发 `.github/workflows/release.yml`，发布一个标签为 `master-<short_sha>` 的快照 release。
-这个快照 release 会上传最新构建出的 `management.html`，这样依赖 `releases/latest` 的后端 fork 就能自动拉到最新已验证前端。
+现在每次推送到 `master`，都会自动触发 `.github/workflows/release.yml`，为当前上游基线发布下一个正式 fork 版本。
+如果上游没有变化，工作流会自动递增自定义版本号，例如 `v1.7.30-wx.1.0`、`v1.7.30-wx.1.1`、`v1.7.30-wx.1.2`。
+这个正式 release 会上传最新构建出的 `management.html`，这样依赖 `releases/latest` 的后端 fork 就能自动拉到最新已验证前端。
 
 ### 7. 仅从 `master` 打正式版本标签
 
