@@ -89,7 +89,8 @@ git push origin master
 ```
 
 Every push to `master` now triggers `.github/workflows/release.yml` and publishes the next formal fork release for the current upstream baseline.
-If upstream has not changed, the workflow automatically increments the fork version suffix such as `v1.7.30-wx.1.0`, `v1.7.30-wx.1.1`, and `v1.7.30-wx.1.2`.
+If the push only syncs a newer upstream baseline, the custom fork version stays unchanged, for example from `v1.7.30-wx-1.1` to `v1.7.31-wx-1.1`.
+If `master` contains new frontend-specific features, fixes, or refinements, the workflow automatically increments the fork version suffix such as `v1.7.30-wx-1.0`, `v1.7.30-wx-1.1`, and `v1.7.31-wx-1.2`.
 That release uploads the latest built `management.html`, so backend forks that track `releases/latest` can pull the newest validated frontend automatically.
 
 ### 7. Create formal versioned releases only from `master`
@@ -103,6 +104,7 @@ git push origin v2026.03.30-fork.1
 
 Versioned `v*` tags still publish formal releases.
 Only create those tags from validated `master` commits.
+If you need to raise the custom major version manually, create the explicit target tag such as `v1.7.31-wx-2.0` from `master`.
 
 ## Local Sync Commands
 

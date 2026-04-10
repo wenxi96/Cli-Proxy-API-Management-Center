@@ -1,0 +1,3 @@
+# tag	version	base_tag	source_commit	previous_tag	previous_commit
+v1.7.30-wx-1.0	1.7.30-wx-1.0	v1.7.30	77e1542daf3464a36b23149fcb16dc3333270c2a		
+v1.7.30-wx-1.1	1.7.30-wx-1.1	v1.7.30	33865b3b1f25aa10aa8df5f0efcd05994a2db9b9	v1.7.30-wx-1.0	77e1542daf3464a36b23149fcb16dc3333270c2a
