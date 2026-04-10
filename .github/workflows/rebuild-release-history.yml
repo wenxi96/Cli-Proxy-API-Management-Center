@@ -52,9 +52,7 @@ jobs:
             [[ "${tag}" == \#* ]] && continue
 
             echo "Cleaning ${tag}"
-            if gh release view "${tag}" >/dev/null 2>&1; then
-              gh release delete "${tag}" --yes --cleanup-tag
-            fi
+            python3 ./scripts/delete-release.py "${tag}"
 
             git tag -d "${tag}" >/dev/null 2>&1 || true
             git push origin ":refs/tags/${tag}" >/dev/null 2>&1 || true
@@ -119,9 +117,7 @@ jobs:
                 VERSION="${version}" \
                 bash -lc 'cd "${BUILD_DIR}" && npm ci && VERSION="${VERSION}" npm run build && mv dist/index.html dist/management.html'
 
-            if gh release view "${tag}" >/dev/null 2>&1; then
-              gh release delete "${tag}" --yes --cleanup-tag
-            fi
+            python3 ./scripts/delete-release.py "${tag}"
             git push origin ":refs/tags/${tag}" >/dev/null 2>&1 || true
 
             run_with_log "publish ${tag}" \
