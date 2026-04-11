@@ -61,6 +61,77 @@
   );
 }
 
+.scopedPoolAuthPanel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: 16px;
+  margin-bottom: $spacing-lg;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--border-color));
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bg-secondary) 95%, var(--primary-color) 6%),
+    color-mix(in srgb, var(--bg-primary) 94%, var(--success-color) 3%)
+  );
+}
+
+.scopedPoolAuthPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+.scopedPoolAuthPanelActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+}
+
+.scopedPoolAuthCategorySection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scopedPoolAuthCategoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scopedPoolAuthCategoryList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scopedPoolAuthCategoryChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+
+  strong {
+    font-weight: 700;
+  }
+}
+
 .batchCheckPanelHeader {
   display: flex;
   align-items: flex-start;
@@ -442,7 +513,7 @@
 
 .filterControls {
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) repeat(2, minmax(120px, 0.72fr)) minmax(220px, auto);
+  grid-template-columns: minmax(240px, 1.35fr) repeat(2, minmax(120px, 0.72fr)) minmax(360px, 1fr);
   gap: $spacing-md;
   align-items: flex-end;
 
@@ -490,8 +561,9 @@
 }
 
 .filterToggleGroup {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   min-height: 40px;
 }
@@ -499,8 +571,9 @@
 .filterToggleCard {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   min-height: 40px;
-  padding: 0 2px;
+  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
@@ -2839,6 +2912,42 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.scopedPoolAuthModalContent {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+}
+
+.scopedPoolAuthProviderGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.scopedPoolAuthProviderCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+}
+
+.scopedPoolAuthProviderHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scopedPoolAuthProviderNames {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-word;
 }
 
 .batchCheckDetailModalHeader {

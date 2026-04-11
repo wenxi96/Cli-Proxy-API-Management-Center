@@ -23,7 +23,12 @@ import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ScopedPoolAuthBadge } from '../ScopedPoolAuthBadge';
 import { ProviderStatusBar } from '../ProviderStatusBar';
-import { getStatsBySource, hasDisableAllModelsRule } from '../utils';
+import {
+  getStatsBySource,
+  hasDisableAllModelsRule,
+  shouldSplitScopedPoolSummary,
+  summarizeScopedPoolVisibleItems,
+} from '../utils';
 
 interface GeminiSectionProps {
   configs: GeminiKeyConfig[];
@@ -77,6 +82,19 @@ export function GeminiSection({
     return cache;
   }, [configs, usageDetailsBySource]);
 
+  const visibleScopedPoolSummary = useMemo(
+    () =>
+      summarizeScopedPoolVisibleItems(
+        configs.length,
+        scopedPoolStatuses,
+        (index) => hasDisableAllModelsRule(configs[index]?.excludedModels)
+      ),
+    [configs, scopedPoolStatuses]
+  );
+
+  const splitScopedPoolSummary =
+    scopedPoolSummary && shouldSplitScopedPoolSummary(scopedPoolSummary, visibleScopedPoolSummary);
+
   return (
     <>
       <Card
@@ -106,14 +124,40 @@ export function GeminiSection({
                 : t('ai_providers.scoped_pool_summary_configured')}
             </span>
             <span className={styles.scopedPoolSummaryHint}>
-              {t('ai_providers.scoped_pool_summary_counts', {
-                active: scopedPoolSummary.activeCount,
-                limit: scopedPoolSummary.limit,
-                standby: scopedPoolSummary.standbyCount,
-                penalized: scopedPoolSummary.penalizedCount,
-                ejected: scopedPoolSummary.ejectedCount,
-              })}
+              {splitScopedPoolSummary
+                ? t('ai_providers.scoped_pool_summary_visible_counts', {
+                    active: visibleScopedPoolSummary.activeCount,
+                    standby: visibleScopedPoolSummary.standbyCount,
+                    penalized: visibleScopedPoolSummary.penalizedCount,
+                    ejected: visibleScopedPoolSummary.ejectedCount,
+                    disabled: visibleScopedPoolSummary.disabledCount,
+                  })
+                : t('ai_providers.scoped_pool_summary_counts', {
+                    active: scopedPoolSummary.activeCount,
+                    limit: scopedPoolSummary.limit,
+                    standby: scopedPoolSummary.standbyCount,
+                    penalized: scopedPoolSummary.penalizedCount,
+                    ejected: scopedPoolSummary.ejectedCount,
+                    disabled: scopedPoolSummary.disabledCount,
+                  })}
             </span>
+            {splitScopedPoolSummary ? (
+              <span className={styles.scopedPoolSummaryHint}>
+                {t('ai_providers.scoped_pool_summary_global_counts', {
+                  active: scopedPoolSummary.activeCount,
+                  limit: scopedPoolSummary.limit,
+                  standby: scopedPoolSummary.standbyCount,
+                  penalized: scopedPoolSummary.penalizedCount,
+                  ejected: scopedPoolSummary.ejectedCount,
+                  disabled: scopedPoolSummary.disabledCount,
+                })}
+              </span>
+            ) : null}
+            {splitScopedPoolSummary ? (
+              <span className={styles.scopedPoolSummaryHint}>
+                {t('ai_providers.scoped_pool_summary_split_hint')}
+              </span>
+            ) : null}
           </div>
         ) : null}
         <ProviderList<GeminiKeyConfig>
