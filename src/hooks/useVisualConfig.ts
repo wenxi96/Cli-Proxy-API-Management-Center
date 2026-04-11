@@ -133,6 +133,21 @@ function getNonNegativeIntegerError(value: string): 'non_negative_integer' | und
   return Number(trimmed) >= 0 ? undefined : 'non_negative_integer';
 }
 
+function getScopedPoolProviderDuplicateError(
+  entries: VisualScopedPoolProviderEntry[]
+): 'duplicate_provider_key' | undefined {
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const providerKey = entry.provider.trim().toLowerCase();
+    if (!providerKey) continue;
+    if (seen.has(providerKey)) return 'duplicate_provider_key';
+    seen.add(providerKey);
+  }
+
+  return undefined;
+}
+
 function getPortError(value: string): 'port_range' | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -150,7 +165,9 @@ export function getVisualConfigValidationErrors(
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
-    routingScopedPoolDefaultsLimit: getNonNegativeIntegerError(values.routingScopedPoolDefaultsLimit),
+    routingScopedPoolDefaultsLimit: getNonNegativeIntegerError(
+      values.routingScopedPoolDefaultsLimit
+    ),
     routingScopedPoolDefaultsQuotaThresholdPercent: getNonNegativeIntegerError(
       values.routingScopedPoolDefaultsQuotaThresholdPercent
     ),
@@ -165,6 +182,9 @@ export function getVisualConfigValidationErrors(
     ),
     routingScopedPoolDefaultsIdleLogThrottleSeconds: getNonNegativeIntegerError(
       values.routingScopedPoolDefaultsIdleLogThrottleSeconds
+    ),
+    routingScopedPoolProviders: getScopedPoolProviderDuplicateError(
+      values.routingScopedPoolProviders
     ),
     'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
     'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
@@ -359,7 +379,9 @@ function parseScopedPoolProviderEntries(raw: unknown): VisualScopedPoolProviderE
   return Object.entries(raw as Record<string, unknown>)
     .map(([provider, value]) => {
       const record = asRecord(value) ?? {};
-      const providerKey = String(provider ?? '').trim().toLowerCase();
+      const providerKey = String(provider ?? '')
+        .trim()
+        .toLowerCase();
       if (!providerKey) return null;
 
       return {
@@ -803,7 +825,9 @@ function getNextDirtyFields(
         baselineValues.routingScopedPoolDefaultsConsecutiveErrorThreshold
     );
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsPenaltyWindowSeconds')) {
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsPenaltyWindowSeconds')
+  ) {
     updateDirty(
       'routingScopedPoolDefaultsPenaltyWindowSeconds',
       nextValues.routingScopedPoolDefaultsPenaltyWindowSeconds ===

@@ -24,11 +24,15 @@ export type VisualConfigFieldPath =
   | 'routingScopedPoolDefaultsPenaltyWindowSeconds'
   | 'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds'
   | 'routingScopedPoolDefaultsIdleLogThrottleSeconds'
+  | 'routingScopedPoolProviders'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
   | 'streaming.nonstreamKeepaliveInterval';
 
-export type VisualConfigValidationErrorCode = 'port_range' | 'non_negative_integer';
+export type VisualConfigValidationErrorCode =
+  | 'port_range'
+  | 'non_negative_integer'
+  | 'duplicate_provider_key';
 
 export type VisualConfigValidationErrors = Partial<
   Record<VisualConfigFieldPath, VisualConfigValidationErrorCode>

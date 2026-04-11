@@ -255,6 +255,10 @@ export function VisualConfigEditor({
     t,
     validationErrors?.routingScopedPoolDefaultsIdleLogThrottleSeconds
   );
+  const scopedPoolProvidersError = getValidationMessage(
+    t,
+    validationErrors?.routingScopedPoolProviders
+  );
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -348,6 +352,20 @@ export function VisualConfigEditor({
       fields.reduce((total, field) => total + (validationErrors?.[field] ? 1 : 0), 0),
     [validationErrors]
   );
+  const duplicateScopedPoolProviderKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    values.routingScopedPoolProviders.forEach((entry) => {
+      const providerKey = entry.provider.trim().toLowerCase();
+      if (!providerKey) return;
+      counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
+    });
+
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([providerKey]) => providerKey)
+    );
+  }, [values.routingScopedPoolProviders]);
 
   const sections = useMemo<VisualSection[]>(
     () => [
@@ -401,6 +419,7 @@ export function VisualConfigEditor({
           'routingScopedPoolDefaultsPenaltyWindowSeconds',
           'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds',
           'routingScopedPoolDefaultsIdleLogThrottleSeconds',
+          'routingScopedPoolProviders',
         ]),
       },
       {
@@ -546,7 +565,8 @@ export function VisualConfigEditor({
         220
       );
       const maxHeight = Math.max(window.innerHeight - top - viewportPadding, 160);
-      const isVisible = workspaceRect.bottom > stickyTop + 24 && anchorRect.top < window.innerHeight;
+      const isVisible =
+        workspaceRect.bottom > stickyTop + 24 && anchorRect.top < window.innerHeight;
 
       floatingElement.style.transform = `translate3d(${left}px, ${top}px, 0)`;
       floatingElement.style.width = `${width}px`;
@@ -1134,7 +1154,9 @@ export function VisualConfigEditor({
                     <div className={styles.blockHeaderRow}>
                       <div className={styles.subsectionHeader}>
                         <h3 className={styles.subsectionTitle}>
-                          {t('config_management.visual.sections.network.scoped_pool_providers_title')}
+                          {t(
+                            'config_management.visual.sections.network.scoped_pool_providers_title'
+                          )}
                         </h3>
                         <p className={styles.subsectionDescription}>
                           {t(
@@ -1153,157 +1175,172 @@ export function VisualConfigEditor({
                       </Button>
                     </div>
 
+                    {scopedPoolProvidersError ? (
+                      <div className="error-box">{scopedPoolProvidersError}</div>
+                    ) : null}
+
                     {values.routingScopedPoolProviders.length === 0 ? (
                       <div className={styles.emptyState}>
-                        {t(
-                          'config_management.visual.sections.network.scoped_pool_providers_empty'
-                        )}
+                        {t('config_management.visual.sections.network.scoped_pool_providers_empty')}
                       </div>
                     ) : (
-                      values.routingScopedPoolProviders.map((entry, index) => (
-                        <div key={entry.id} className={styles.ruleCard}>
-                          <div className={styles.ruleCardHeader}>
-                            <div className={styles.ruleCardTitle}>
-                              {entry.provider.trim() ||
-                                t(
-                                  'config_management.visual.sections.network.scoped_pool_provider_title',
-                                  {
-                                    index: index + 1,
-                                  }
+                      values.routingScopedPoolProviders.map((entry, index) => {
+                        const providerKey = entry.provider.trim().toLowerCase();
+                        const providerDuplicate =
+                          providerKey !== '' && duplicateScopedPoolProviderKeys.has(providerKey);
+
+                        return (
+                          <div key={entry.id} className={styles.ruleCard}>
+                            <div className={styles.ruleCardHeader}>
+                              <div className={styles.ruleCardTitle}>
+                                {entry.provider.trim() ||
+                                  t(
+                                    'config_management.visual.sections.network.scoped_pool_provider_title',
+                                    {
+                                      index: index + 1,
+                                    }
+                                  )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveScopedPoolProviderEntry(entry.id)}
+                                disabled={disabled}
+                              >
+                                {t(
+                                  'config_management.visual.sections.network.scoped_pool_provider_remove'
                                 )}
+                              </Button>
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveScopedPoolProviderEntry(entry.id)}
-                              disabled={disabled}
-                            >
-                              {t(
-                                'config_management.visual.sections.network.scoped_pool_provider_remove'
+
+                            <ToggleRow
+                              title={t(
+                                'config_management.visual.sections.network.scoped_pool_provider_enabled'
                               )}
-                            </Button>
+                              description={t(
+                                'config_management.visual.sections.network.scoped_pool_provider_enabled_desc'
+                              )}
+                              checked={entry.enabled}
+                              disabled={disabled}
+                              onChange={(enabled) =>
+                                handleScopedPoolProviderEntryChange(entry.id, { enabled })
+                              }
+                            />
+
+                            <SectionGrid>
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_provider_name'
+                                )}
+                                placeholder="codex"
+                                list={scopedPoolProviderOptionsId}
+                                value={entry.provider}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    provider: e.target.value.toLowerCase(),
+                                  })
+                                }
+                                disabled={disabled}
+                                error={
+                                  providerDuplicate
+                                    ? t(
+                                        'config_management.visual.validation.duplicate_provider_key'
+                                      )
+                                    : undefined
+                                }
+                                hint={t(
+                                  'config_management.visual.sections.network.scoped_pool_provider_name_hint'
+                                )}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_limit'
+                                )}
+                                type="number"
+                                placeholder="5"
+                                value={entry.limit}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    limit: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
+                                )}
+                                type="number"
+                                placeholder="0"
+                                value={entry.quotaThresholdPercent}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    quotaThresholdPercent: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
+                                )}
+                                type="number"
+                                placeholder="3"
+                                value={entry.consecutiveErrorThreshold}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    consecutiveErrorThreshold: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
+                                )}
+                                type="number"
+                                placeholder="300"
+                                value={entry.penaltyWindowSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    penaltyWindowSeconds: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
+                                )}
+                                type="number"
+                                placeholder="300"
+                                value={entry.quotaSnapshotTTLSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    quotaSnapshotTTLSeconds: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
+                                )}
+                                type="number"
+                                placeholder="60"
+                                value={entry.idleLogThrottleSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolProviderEntryChange(entry.id, {
+                                    idleLogThrottleSeconds: e.target.value,
+                                  })
+                                }
+                                disabled={disabled}
+                              />
+                            </SectionGrid>
                           </div>
-
-                          <ToggleRow
-                            title={t(
-                              'config_management.visual.sections.network.scoped_pool_provider_enabled'
-                            )}
-                            description={t(
-                              'config_management.visual.sections.network.scoped_pool_provider_enabled_desc'
-                            )}
-                            checked={entry.enabled}
-                            disabled={disabled}
-                            onChange={(enabled) =>
-                              handleScopedPoolProviderEntryChange(entry.id, { enabled })
-                            }
-                          />
-
-                          <SectionGrid>
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_provider_name'
-                              )}
-                              placeholder="codex"
-                              list={scopedPoolProviderOptionsId}
-                              value={entry.provider}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  provider: e.target.value.toLowerCase(),
-                                })
-                              }
-                              disabled={disabled}
-                              hint={t(
-                                'config_management.visual.sections.network.scoped_pool_provider_name_hint'
-                              )}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_limit'
-                              )}
-                              type="number"
-                              placeholder="5"
-                              value={entry.limit}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  limit: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
-                              )}
-                              type="number"
-                              placeholder="0"
-                              value={entry.quotaThresholdPercent}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  quotaThresholdPercent: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
-                              )}
-                              type="number"
-                              placeholder="3"
-                              value={entry.consecutiveErrorThreshold}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  consecutiveErrorThreshold: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
-                              )}
-                              type="number"
-                              placeholder="300"
-                              value={entry.penaltyWindowSeconds}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  penaltyWindowSeconds: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
-                              )}
-                              type="number"
-                              placeholder="300"
-                              value={entry.quotaSnapshotTTLSeconds}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  quotaSnapshotTTLSeconds: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                            <Input
-                              label={t(
-                                'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
-                              )}
-                              type="number"
-                              placeholder="60"
-                              value={entry.idleLogThrottleSeconds}
-                              onChange={(e) =>
-                                handleScopedPoolProviderEntryChange(entry.id, {
-                                  idleLogThrottleSeconds: e.target.value,
-                                })
-                              }
-                              disabled={disabled}
-                            />
-                          </SectionGrid>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
 

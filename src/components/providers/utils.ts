@@ -1,4 +1,11 @@
-import type { AmpcodeConfig, AmpcodeModelMapping, AmpcodeUpstreamApiKeyMapping, ApiKeyEntry } from '@/types';
+import type {
+  AmpcodeConfig,
+  AmpcodeModelMapping,
+  AmpcodeUpstreamApiKeyMapping,
+  ApiKeyEntry,
+  ScopedPoolAuthRuntimeStatus,
+  ScopedPoolProviderRuntimeStatus,
+} from '@/types';
 import { buildCandidateUsageSourceIds, type KeyStatBucket, type KeyStats } from '@/utils/usage';
 import type { AmpcodeFormState, AmpcodeUpstreamApiKeyEntry, ModelEntry } from './types';
 
@@ -22,6 +29,73 @@ export const withoutDisableAllModelsRule = (models?: string[]) => {
   const base = stripDisableAllModelsRule(models);
   return base;
 };
+
+export interface ScopedPoolVisibleSummary {
+  totalCount: number;
+  activeCount: number;
+  standbyCount: number;
+  penalizedCount: number;
+  ejectedCount: number;
+  disabledCount: number;
+  unmanagedCount: number;
+}
+
+export const summarizeScopedPoolVisibleItems = (
+  totalItems: number,
+  statuses: Map<number, ScopedPoolAuthRuntimeStatus>,
+  isDisabled?: (index: number) => boolean
+): ScopedPoolVisibleSummary => {
+  const summary: ScopedPoolVisibleSummary = {
+    totalCount: totalItems,
+    activeCount: 0,
+    standbyCount: 0,
+    penalizedCount: 0,
+    ejectedCount: 0,
+    disabledCount: 0,
+    unmanagedCount: 0,
+  };
+
+  for (let index = 0; index < totalItems; index += 1) {
+    const status = statuses.get(index);
+    const disabled = Boolean(isDisabled?.(index) || status?.disabled || status?.state === 'disabled');
+
+    if (disabled) {
+      summary.disabledCount += 1;
+      continue;
+    }
+
+    switch (status?.state) {
+      case 'in_pool':
+        summary.activeCount += 1;
+        break;
+      case 'standby':
+        summary.standbyCount += 1;
+        break;
+      case 'penalized':
+        summary.penalizedCount += 1;
+        break;
+      case 'ejected':
+        summary.ejectedCount += 1;
+        break;
+      default:
+        summary.unmanagedCount += 1;
+        break;
+    }
+  }
+
+  return summary;
+};
+
+export const shouldSplitScopedPoolSummary = (
+  providerSummary: ScopedPoolProviderRuntimeStatus,
+  visibleSummary: ScopedPoolVisibleSummary
+) =>
+  visibleSummary.totalCount !== providerSummary.candidateCount ||
+  visibleSummary.activeCount !== providerSummary.activeCount ||
+  visibleSummary.standbyCount !== providerSummary.standbyCount ||
+  visibleSummary.penalizedCount !== providerSummary.penalizedCount ||
+  visibleSummary.ejectedCount !== providerSummary.ejectedCount ||
+  visibleSummary.disabledCount !== providerSummary.disabledCount;
 
 export const parseTextList = (text: string): string[] =>
   text

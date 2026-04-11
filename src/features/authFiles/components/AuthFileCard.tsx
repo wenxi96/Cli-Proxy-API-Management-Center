@@ -224,6 +224,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
         : '';
   const poolReasonLabel =
     poolReasonKey !== 'none' ? t(`auth_files.pool_reason_${poolReasonKey}`) : '';
+  const visiblePoolStateLabel = file.disabled && poolStateKey === 'disabled' ? '' : poolStateLabel;
+  const visiblePoolReasonLabel =
+    file.disabled && poolReasonKey === 'disabled' ? '' : poolReasonLabel;
+  const hasVisiblePoolStatus =
+    Boolean(visiblePoolStateLabel) ||
+    Boolean(visiblePoolReasonLabel) ||
+    typeof poolRemainingPercent === 'number' ||
+    (typeof poolConsecutiveErrors === 'number' && poolConsecutiveErrors > 0) ||
+    Boolean(poolPenaltyUntil);
   const poolPrimaryBadgeClass =
     poolEnabled && poolInPool
       ? styles.batchCheckBadgeSuccess
@@ -331,16 +340,16 @@ export function AuthFileCard(props: AuthFileCardProps) {
             </div>
           )}
 
-          {showPoolStatus && (
+          {showPoolStatus && hasVisiblePoolStatus && (
             <div className={styles.batchCheckBadgeRow}>
-              {poolStateLabel ? (
+              {visiblePoolStateLabel ? (
                 <span className={`${styles.batchCheckBadge} ${poolPrimaryBadgeClass}`}>
-                  {poolStateLabel}
+                  {visiblePoolStateLabel}
                 </span>
               ) : null}
-              {poolReasonLabel ? (
+              {visiblePoolReasonLabel ? (
                 <span className={`${styles.batchCheckBadge} ${poolSecondaryBadgeClass}`}>
-                  {poolReasonLabel}
+                  {visiblePoolReasonLabel}
                 </span>
               ) : null}
               {typeof poolRemainingPercent === 'number' ? (
