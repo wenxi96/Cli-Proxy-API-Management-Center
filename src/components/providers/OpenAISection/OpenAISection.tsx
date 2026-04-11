@@ -113,7 +113,7 @@ export function OpenAISection({
             return (
               <Fragment>
                 <div className="item-title">{item.name}</div>
-                {scopedPoolSummary?.configured ? (
+                {scopedPoolSummary?.effective ? (
                   <div className={styles.scopedPoolSummaryRow}>
                     <span
                       className={`${styles.scopedPoolBadge} ${

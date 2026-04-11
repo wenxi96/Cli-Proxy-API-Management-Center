@@ -24,6 +24,7 @@ export type VisualConfigFieldPath =
   | 'routingScopedPoolDefaultsPenaltyWindowSeconds'
   | 'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds'
   | 'routingScopedPoolDefaultsIdleLogThrottleSeconds'
+  | 'routingScopedPoolEnabled'
   | 'routingScopedPoolProviders'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
@@ -107,6 +108,7 @@ export type VisualConfigValues = {
   quotaSwitchPreviewModel: boolean;
   quotaAutoDisableAuthFileOnZeroQuota: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
+  routingScopedPoolEnabled: boolean;
   routingScopedPoolDefaultsLimit: string;
   routingScopedPoolDefaultsQuotaThresholdPercent: string;
   routingScopedPoolDefaultsConsecutiveErrorThreshold: string;
@@ -154,6 +156,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchPreviewModel: true,
   quotaAutoDisableAuthFileOnZeroQuota: false,
   routingStrategy: 'round-robin',
+  routingScopedPoolEnabled: false,
   routingScopedPoolDefaultsLimit: '',
   routingScopedPoolDefaultsQuotaThresholdPercent: '',
   routingScopedPoolDefaultsConsecutiveErrorThreshold: '',

@@ -10,20 +10,13 @@ interface ScopedPoolAuthBadgeProps {
 export function ScopedPoolAuthBadge({ status }: ScopedPoolAuthBadgeProps) {
   const { t } = useTranslation();
 
-  if (!status?.configured && !status?.poolEnabled && !status?.state && !status?.reason) {
+  if (!status?.poolEnabled && !status?.state && !status?.reason) {
     return null;
   }
 
-  const stateKey = status?.poolEnabled
-    ? getScopedPoolStateKey(status.state)
-    : status?.configured
-      ? 'configured'
-      : 'unmanaged';
+  const stateKey = status?.poolEnabled ? getScopedPoolStateKey(status.state) : 'unmanaged';
   const reasonKey = getScopedPoolReasonKey(status?.reason);
-  const stateLabel =
-    stateKey === 'configured'
-      ? t('ai_providers.scoped_pool_state_configured')
-      : t(`ai_providers.scoped_pool_state_${stateKey}`);
+  const stateLabel = t(`ai_providers.scoped_pool_state_${stateKey}`);
   const reasonLabel =
     reasonKey !== 'none' ? t(`ai_providers.scoped_pool_reason_${reasonKey}`) : '';
   const primaryClass =

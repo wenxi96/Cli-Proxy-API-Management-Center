@@ -409,6 +409,22 @@ function parseScopedPoolProviderEntries(raw: unknown): VisualScopedPoolProviderE
     .filter(Boolean) as VisualScopedPoolProviderEntry[];
 }
 
+function inferScopedPoolEnabled(raw: unknown): boolean {
+  const record = asRecord(raw);
+  if (!record) return false;
+  if (typeof record.enabled === 'boolean') {
+    return record.enabled;
+  }
+
+  const providers = asRecord(record.providers);
+  if (!providers) return false;
+
+  return Object.values(providers).some((providerValue) => {
+    const provider = asRecord(providerValue);
+    return provider?.enabled === true;
+  });
+}
+
 function serializeScopedPoolProviderEntriesForYaml(
   entries: VisualScopedPoolProviderEntry[]
 ): Record<string, Record<string, unknown>> {
@@ -798,6 +814,12 @@ function getNextDirtyFields(
   if (Object.prototype.hasOwnProperty.call(patch, 'routingStrategy')) {
     updateDirty('routingStrategy', nextValues.routingStrategy === baselineValues.routingStrategy);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolEnabled')) {
+    updateDirty(
+      'routingScopedPoolEnabled',
+      nextValues.routingScopedPoolEnabled === baselineValues.routingScopedPoolEnabled
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'routingScopedPoolDefaultsLimit')) {
     updateDirty(
       'routingScopedPoolDefaultsLimit',
@@ -1045,6 +1067,7 @@ export function useVisualConfig() {
         ),
 
         routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
+        routingScopedPoolEnabled: inferScopedPoolEnabled(scopedPool),
         routingScopedPoolDefaultsLimit: parseScopedPoolNumber(scopedPoolDefaults?.limit),
         routingScopedPoolDefaultsQuotaThresholdPercent: parseScopedPoolNumber(
           scopedPoolDefaults?.['quota-threshold-percent'] ??
@@ -1195,13 +1218,25 @@ export function useVisualConfig() {
         if (
           docHas(doc, ['routing']) ||
           values.routingStrategy !== 'round-robin' ||
+          values.routingScopedPoolEnabled ||
           hasScopedPoolConfig ||
           docHas(doc, ['routing', 'scoped-pool'])
         ) {
           ensureMapInDoc(doc, ['routing']);
           doc.setIn(['routing', 'strategy'], values.routingStrategy);
-          if (hasScopedPoolConfig || docHas(doc, ['routing', 'scoped-pool'])) {
+          if (
+            values.routingScopedPoolEnabled ||
+            hasScopedPoolConfig ||
+            docHas(doc, ['routing', 'scoped-pool'])
+          ) {
             ensureMapInDoc(doc, ['routing', 'scoped-pool']);
+            if (
+              values.routingScopedPoolEnabled ||
+              hasScopedPoolConfig ||
+              docHas(doc, ['routing', 'scoped-pool', 'enabled'])
+            ) {
+              doc.setIn(['routing', 'scoped-pool', 'enabled'], values.routingScopedPoolEnabled);
+            }
 
             if (hasScopedPoolDefaults || docHas(doc, ['routing', 'scoped-pool', 'defaults'])) {
               ensureMapInDoc(doc, ['routing', 'scoped-pool', 'defaults']);

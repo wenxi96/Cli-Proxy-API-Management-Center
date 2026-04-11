@@ -408,6 +408,10 @@ export const normalizeRoutingScopedPoolConfig = (
   if (!isRecord(payload)) return undefined;
 
   const result: RoutingScopedPoolConfig = {};
+  const enabled = normalizeBoolean(payload.enabled);
+  if (enabled !== undefined) {
+    result.enabled = enabled;
+  }
   const defaults = normalizeScopedPoolProviderConfig(payload.defaults);
   if (defaults) {
     result.defaults = defaults;

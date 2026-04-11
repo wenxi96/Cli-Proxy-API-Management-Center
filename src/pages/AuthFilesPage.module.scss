@@ -61,74 +61,36 @@
   );
 }
 
-.scopedPoolAuthPanel {
+.scopedPoolAuthSummaryRow {
   display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-  padding: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-bottom: $spacing-lg;
-  border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--border-color));
-  border-radius: 14px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--bg-secondary) 95%, var(--primary-color) 6%),
-    color-mix(in srgb, var(--bg-primary) 94%, var(--success-color) 3%)
-  );
 }
 
-.scopedPoolAuthPanelHeader {
+.scopedPoolAuthSummaryMeta {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: $spacing-md;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 640px;
+}
+
+.scopedPoolAuthSummaryHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.scopedPoolAuthSummaryButton {
+  flex: 0 0 auto;
+  margin-left: auto;
 
   @include mobile {
-    flex-direction: column;
-  }
-}
-
-.scopedPoolAuthPanelActions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: $spacing-sm;
-  flex-wrap: wrap;
-}
-
-.scopedPoolAuthCategorySection {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.scopedPoolAuthCategoryHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.scopedPoolAuthCategoryList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.scopedPoolAuthCategoryChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
-  color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.4;
-
-  strong {
-    font-weight: 700;
+    margin-left: 0;
   }
 }
 

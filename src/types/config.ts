@@ -23,6 +23,7 @@ export interface RoutingScopedPoolProviderConfig {
 }
 
 export interface RoutingScopedPoolConfig {
+  enabled?: boolean;
   defaults?: RoutingScopedPoolProviderConfig;
   providers?: Record<string, RoutingScopedPoolProviderConfig>;
 }

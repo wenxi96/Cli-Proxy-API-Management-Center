@@ -15,6 +15,7 @@ import styles from './Select.module.scss';
 export interface SelectOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 interface SelectProps {
@@ -168,8 +169,18 @@ export function Select({
   }, [isOpen, scheduleDropdownStyleUpdate, updateDropdownStyle]);
 
   const selectedIndex = useMemo(() => options.findIndex((option) => option.value === value), [options, value]);
+  const enabledOptionIndexes = useMemo(
+    () => options.map((option, index) => (option.disabled ? -1 : index)).filter((index) => index >= 0),
+    [options]
+  );
+  const defaultHighlightedIndex = useMemo(() => {
+    if (selectedIndex >= 0 && !options[selectedIndex]?.disabled) return selectedIndex;
+    return enabledOptionIndexes[0] ?? -1;
+  }, [enabledOptionIndexes, options, selectedIndex]);
   const resolvedHighlightedIndex =
-    highlightedIndex >= 0 ? highlightedIndex : selectedIndex >= 0 ? selectedIndex : options.length > 0 ? 0 : -1;
+    highlightedIndex >= 0 && !options[highlightedIndex]?.disabled
+      ? highlightedIndex
+      : defaultHighlightedIndex;
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
   const displayText = selected?.label ?? placeholder ?? '';
   const isPlaceholder = !selected && placeholder;
@@ -177,7 +188,7 @@ export function Select({
   const commitSelection = useCallback(
     (nextIndex: number) => {
       const nextOption = options[nextIndex];
-      if (!nextOption) return;
+      if (!nextOption || nextOption.disabled) return;
       onChange(nextOption.value);
       setOpen(false);
       setHighlightedIndex(nextIndex);
@@ -187,11 +198,14 @@ export function Select({
 
   const moveHighlight = useCallback(
     (direction: 1 | -1) => {
-      if (options.length === 0) return;
-      const nextIndex = (resolvedHighlightedIndex + direction + options.length) % options.length;
-      setHighlightedIndex(nextIndex);
+      if (enabledOptionIndexes.length === 0) return;
+      const currentPosition = enabledOptionIndexes.indexOf(resolvedHighlightedIndex);
+      const basePosition = currentPosition >= 0 ? currentPosition : 0;
+      const nextPosition =
+        (basePosition + direction + enabledOptionIndexes.length) % enabledOptionIndexes.length;
+      setHighlightedIndex(enabledOptionIndexes[nextPosition] ?? -1);
     },
-    [options.length, resolvedHighlightedIndex]
+    [enabledOptionIndexes, resolvedHighlightedIndex]
   );
 
   const handleKeyDown = useCallback(
@@ -216,14 +230,14 @@ export function Select({
           moveHighlight(-1);
           return;
         case 'Home':
-          if (!isOpen || options.length === 0) return;
+          if (!isOpen || enabledOptionIndexes.length === 0) return;
           event.preventDefault();
-          setHighlightedIndex(0);
+          setHighlightedIndex(enabledOptionIndexes[0] ?? -1);
           return;
         case 'End':
-          if (!isOpen || options.length === 0) return;
+          if (!isOpen || enabledOptionIndexes.length === 0) return;
           event.preventDefault();
-          setHighlightedIndex(options.length - 1);
+          setHighlightedIndex(enabledOptionIndexes[enabledOptionIndexes.length - 1] ?? -1);
           return;
         case 'Enter':
         case ' ': {
@@ -249,7 +263,7 @@ export function Select({
           return;
       }
     },
-    [commitSelection, disabled, isOpen, moveHighlight, options.length, resolvedHighlightedIndex]
+    [commitSelection, disabled, enabledOptionIndexes, isOpen, moveHighlight, resolvedHighlightedIndex]
   );
 
   useEffect(() => {
@@ -279,10 +293,16 @@ export function Select({
                   type="button"
                   role="option"
                   aria-selected={active}
-                  className={`${styles.option} ${active ? styles.optionActive : ''} ${highlighted ? styles.optionHighlighted : ''}`.trim()}
-                  onMouseEnter={() => setHighlightedIndex(index)}
+                  aria-disabled={opt.disabled ? 'true' : undefined}
+                  className={`${styles.option} ${active ? styles.optionActive : ''} ${highlighted ? styles.optionHighlighted : ''} ${opt.disabled ? styles.optionDisabled : ''}`.trim()}
+                  onMouseEnter={() => {
+                    if (!opt.disabled) {
+                      setHighlightedIndex(index);
+                    }
+                  }}
                   onKeyDown={handleKeyDown}
                   onClick={() => commitSelection(index)}
+                  disabled={opt.disabled}
                 >
                   {opt.label}
                 </button>

@@ -110,7 +110,7 @@ export function CodexSection({
           </Button>
         }
       >
-        {scopedPoolSummary?.configured ? (
+        {scopedPoolSummary?.effective ? (
           <div className={styles.scopedPoolSummaryRow}>
             <span
               className={`${styles.scopedPoolBadge} ${
@@ -151,11 +151,6 @@ export function CodexSection({
                   ejected: scopedPoolSummary.ejectedCount,
                   disabled: scopedPoolSummary.disabledCount,
                 })}
-              </span>
-            ) : null}
-            {splitScopedPoolSummary ? (
-              <span className={styles.scopedPoolSummaryHint}>
-                {t('ai_providers.scoped_pool_summary_split_hint')}
               </span>
             ) : null}
           </div>

@@ -196,7 +196,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
         : batchCheckResult
           ? styles.batchCheckBadgeDanger
           : styles.batchCheckBadgeMuted;
-  const poolConfigured = readBooleanField(file.poolConfigured ?? file['pool_configured']) ?? false;
   const poolEnabled = readBooleanField(file.poolEnabled ?? file['pool_enabled']) ?? false;
   const poolInPool = readBooleanField(file.inPool ?? file['in_pool']) ?? false;
   const poolState = readStringField(file.poolState ?? file['pool_state']);
@@ -208,20 +207,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
     file.poolConsecutiveErrors ?? file['pool_consecutive_errors']
   );
   const poolPenaltyUntil = readStringField(file.poolPenaltyUntil ?? file['pool_penalty_until']);
-  const showPoolStatus = poolConfigured || poolEnabled || poolState !== '' || poolReason !== '';
-  const poolStateKey =
-    poolEnabled && poolState
-      ? getScopedPoolStateKey(poolState)
-      : poolConfigured
-        ? 'configured'
-        : 'unmanaged';
+  const showPoolStatus = poolEnabled || poolState !== '' || poolReason !== '';
+  const poolStateKey = poolEnabled && poolState ? getScopedPoolStateKey(poolState) : 'unmanaged';
   const poolReasonKey = getScopedPoolReasonKey(poolReason);
-  const poolStateLabel =
-    poolStateKey === 'configured'
-      ? t('auth_files.pool_state_configured')
-      : showPoolStatus
-        ? t(`auth_files.pool_state_${poolStateKey}`)
-        : '';
+  const poolStateLabel = showPoolStatus ? t(`auth_files.pool_state_${poolStateKey}`) : '';
   const poolReasonLabel =
     poolReasonKey !== 'none' ? t(`auth_files.pool_reason_${poolReasonKey}`) : '';
   const visiblePoolStateLabel = file.disabled && poolStateKey === 'disabled' ? '' : poolStateLabel;
