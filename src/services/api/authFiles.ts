@@ -615,13 +615,23 @@ export const authFilesApi = {
 
   deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
 
+  downloadFile: (name: string) =>
+    apiClient.getRaw(`/auth-files/download?name=${encodeURIComponent(name)}`, {
+      responseType: 'blob',
+    }),
+
+  downloadArchive: (names: string[]) => {
+    const requestedNames = normalizeRequestedAuthFileNames(names);
+    return apiClient.requestRaw({
+      url: '/auth-files/download-archive',
+      method: 'post',
+      data: { names: requestedNames },
+      responseType: 'blob',
+    });
+  },
+
   downloadText: async (name: string): Promise<string> => {
-    const response = await apiClient.getRaw(
-      `/auth-files/download?name=${encodeURIComponent(name)}`,
-      {
-        responseType: 'blob',
-      }
-    );
+    const response = await authFilesApi.downloadFile(name);
     const blob = response.data as Blob;
     return blob.text();
   },

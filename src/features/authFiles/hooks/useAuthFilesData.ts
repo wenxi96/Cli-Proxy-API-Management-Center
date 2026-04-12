@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
-import { apiClient } from '@/services/api/client';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import { formatFileSize } from '@/utils/format';
@@ -18,6 +17,72 @@ type DeleteAllOptions = {
   problemOnly: boolean;
   onResetFilterToAll: () => void;
   onResetProblemOnly: () => void;
+};
+
+type DownloadResponseHeaders = {
+  get?: (name: string) => string | null | undefined;
+  [key: string]: unknown;
+};
+
+const getResponseHeader = (headers: unknown, name: string): string => {
+  if (!headers || typeof headers !== 'object') {
+    return '';
+  }
+
+  const normalizedName = name.toLowerCase();
+  const headerBag = headers as DownloadResponseHeaders;
+
+  if (typeof headerBag.get === 'function') {
+    const value = headerBag.get(normalizedName);
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  const directValue = headerBag[normalizedName] ?? headerBag[name];
+  return typeof directValue === 'string' ? directValue.trim() : '';
+};
+
+const decodeContentDispositionFilename = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const utf8PrefixMatch = trimmed.match(/^([^']*)''(.+)$/);
+  const rawValue = utf8PrefixMatch ? utf8PrefixMatch[2] : trimmed;
+  const unquoted = rawValue.replace(/^"(.*)"$/, '$1');
+
+  try {
+    return decodeURIComponent(unquoted);
+  } catch {
+    return unquoted;
+  }
+};
+
+const resolveDownloadFilename = (headers: unknown, fallbackFilename: string): string => {
+  const contentDisposition = getResponseHeader(headers, 'content-disposition');
+  if (!contentDisposition) {
+    return fallbackFilename;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*([^;]+)/i);
+  if (utf8Match?.[1]) {
+    const filename = decodeContentDispositionFilename(utf8Match[1]);
+    if (filename) {
+      return filename;
+    }
+  }
+
+  const basicMatch = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/i);
+  if (basicMatch?.[2]) {
+    const filename = decodeContentDispositionFilename(basicMatch[2]);
+    if (filename) {
+      return filename;
+    }
+  }
+
+  return fallbackFilename;
 };
 
 export type UseAuthFilesDataResult = {
@@ -383,12 +448,13 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
   const handleDownload = useCallback(
     async (name: string) => {
       try {
-        const response = await apiClient.getRaw(
-          `/auth-files/download?name=${encodeURIComponent(name)}`,
-          { responseType: 'blob' }
-        );
-        const blob = new Blob([response.data]);
-        downloadBlob({ filename: name, blob });
+        const response = await authFilesApi.downloadFile(name);
+        const blob =
+          response.data instanceof Blob ? response.data : new Blob([response.data as BlobPart]);
+        downloadBlob({
+          filename: resolveDownloadFilename(response.headers, name),
+          blob,
+        });
         showNotification(t('auth_files.download_success'), 'success');
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : '';
@@ -533,36 +599,35 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       const uniqueNames = Array.from(new Set(names));
       if (uniqueNames.length === 0) return;
 
-      let successCount = 0;
-      let failCount = 0;
-
-      for (const name of uniqueNames) {
-        try {
-          const response = await apiClient.getRaw(
-            `/auth-files/download?name=${encodeURIComponent(name)}`,
-            { responseType: 'blob' }
-          );
-          const blob = new Blob([response.data]);
-          downloadBlob({ filename: name, blob });
-          successCount++;
-        } catch {
-          failCount++;
-        }
+      if (uniqueNames.length === 1) {
+        await handleDownload(uniqueNames[0]);
+        return;
       }
 
-      if (failCount === 0) {
+      try {
+        const response = await authFilesApi.downloadArchive(uniqueNames);
+        const blob =
+          response.data instanceof Blob
+            ? response.data
+            : new Blob([response.data as BlobPart], { type: 'application/zip' });
+
+        downloadBlob({
+          filename: resolveDownloadFilename(
+            response.headers,
+            `auth-files-${uniqueNames.length}.zip`
+          ),
+          blob,
+        });
         showNotification(
-          t('auth_files.batch_download_success', { count: successCount }),
+          t('auth_files.batch_download_success', { count: uniqueNames.length }),
           'success'
         );
-      } else {
-        showNotification(
-          t('auth_files.batch_download_partial', { success: successCount, failed: failCount }),
-          'warning'
-        );
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : '';
+        showNotification(`${t('notification.download_failed')}: ${errorMessage}`, 'error');
       }
     },
-    [showNotification, t]
+    [handleDownload, showNotification, t]
   );
 
   const deleteFilesNow = useCallback(

@@ -596,7 +596,7 @@
     "batch_invert_page": "反选当前页",
     "batch_deselect": "取消选择",
     "batch_download": "下载选中",
-    "batch_download_success": "已开始下载 {{count}} 个文件",
+    "batch_download_success": "已开始下载 {{count}} 个文件的压缩包",
     "batch_download_partial": "下载完成：成功 {{success}} 个，失败 {{failed}} 个",
     "batch_enable": "启用",
     "batch_disable": "禁用",

@@ -596,7 +596,7 @@
     "batch_invert_page": "Invert page",
     "batch_deselect": "Deselect",
     "batch_download": "Download selected",
-    "batch_download_success": "Started downloading {{count}} files",
+    "batch_download_success": "Started downloading an archive for {{count}} files",
     "batch_download_partial": "Download finished: {{success}} succeeded, {{failed}} failed",
     "batch_enable": "Enable",
     "batch_disable": "Disable",
