@@ -2,26 +2,13 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - master
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      release_bump:
-        description: Release bump mode for manual runs
-        required: false
-        default: auto
-        type: choice
-        options:
-          - auto
-          - preserve
-          - minor
-          - major
 
 jobs:
   build-and-release:
-    if: github.event_name != 'push' || github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[skip release]')
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     permissions:
@@ -55,24 +42,14 @@ jobs:
       - name: Determine release metadata
         id: meta
         shell: bash
-        env:
-          RELEASE_BUMP: ${{ inputs.release_bump }}
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            eval "$(bash ./scripts/version.sh release "${GITHUB_REF_NAME}" | sed 's/^/export /')"
-            release_tag="${RELEASE_TAG}"
-            release_name="${RELEASE_NAME}"
-            build_version="${VERSION}"
-            release_kind="tag"
-          else
-            eval "$(bash ./scripts/version.sh auto-release | sed 's/^/export /')"
-            release_tag="${RELEASE_TAG}"
-            release_name="${RELEASE_NAME}"
-            build_version="${VERSION}"
-            release_kind="auto-release"
-          fi
+          eval "$(bash ./scripts/version.sh release "${GITHUB_REF_NAME}" | sed 's/^/export /')"
+          release_tag="${RELEASE_TAG}"
+          release_name="${RELEASE_NAME}"
+          build_version="${VERSION}"
+          release_kind="tag"
 
           {
             echo "release_tag=${release_tag}"
