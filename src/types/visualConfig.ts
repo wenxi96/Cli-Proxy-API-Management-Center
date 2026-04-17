@@ -107,6 +107,7 @@ export type VisualConfigValues = {
   quotaSwitchProject: boolean;
   quotaSwitchPreviewModel: boolean;
   quotaAutoDisableAuthFileOnZeroQuota: boolean;
+  quotaAntigravityCredits: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
   routingScopedPoolEnabled: boolean;
   routingScopedPoolDefaultsLimit: string;
@@ -155,6 +156,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
   quotaAutoDisableAuthFileOnZeroQuota: false,
+  quotaAntigravityCredits: true,
   routingStrategy: 'round-robin',
   routingScopedPoolEnabled: false,
   routingScopedPoolDefaultsLimit: '',

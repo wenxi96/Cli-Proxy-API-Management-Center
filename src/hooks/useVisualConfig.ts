@@ -811,6 +811,12 @@ function getNextDirtyFields(
         baselineValues.quotaAutoDisableAuthFileOnZeroQuota
     );
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaAntigravityCredits')) {
+    updateDirty(
+      'quotaAntigravityCredits',
+      nextValues.quotaAntigravityCredits === baselineValues.quotaAntigravityCredits
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'routingStrategy')) {
     updateDirty('routingStrategy', nextValues.routingStrategy === baselineValues.routingStrategy);
   }
@@ -1065,6 +1071,7 @@ export function useVisualConfig() {
         quotaAutoDisableAuthFileOnZeroQuota: Boolean(
           quotaExceeded?.['auto-disable-auth-file-on-zero-quota'] ?? false
         ),
+        quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? true),
 
         routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
         routingScopedPoolEnabled: inferScopedPoolEnabled(scopedPool),
@@ -1190,7 +1197,8 @@ export function useVisualConfig() {
           docHas(doc, ['quota-exceeded']) ||
           !values.quotaSwitchProject ||
           !values.quotaSwitchPreviewModel ||
-          values.quotaAutoDisableAuthFileOnZeroQuota
+          values.quotaAutoDisableAuthFileOnZeroQuota ||
+          !values.quotaAntigravityCredits
         ) {
           ensureMapInDoc(doc, ['quota-exceeded']);
           doc.setIn(['quota-exceeded', 'switch-project'], values.quotaSwitchProject);
@@ -1198,6 +1206,10 @@ export function useVisualConfig() {
           doc.setIn(
             ['quota-exceeded', 'auto-disable-auth-file-on-zero-quota'],
             values.quotaAutoDisableAuthFileOnZeroQuota
+          );
+          doc.setIn(
+            ['quota-exceeded', 'antigravity-credits'],
+            values.quotaAntigravityCredits
           );
           deleteIfMapEmpty(doc, ['quota-exceeded']);
         }
