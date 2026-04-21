@@ -960,7 +960,8 @@
     "plan_pro": "Pro",
     "plan_max": "Max",
     "plan_max5": "Max 5x",
-    "plan_max20": "Max 20x"
+    "plan_max20": "Max 20x",
+    "plan_team": "Team"
   },
   "codex_quota": {
     "title": "Codex Quota",
@@ -1569,8 +1570,10 @@
           "scoped_pool_provider_name": "Provider Key",
           "scoped_pool_provider_name_placeholder": "Select a provider key",
           "scoped_pool_provider_name_hint": "Common values: gemini, codex, claude, vertex, gemini-cli, aistudio, qwen, iflow, kimi, antigravity, or a concrete OpenAI-compatible source name. Provider Keys must be unique.",
+          "session_affinity_ttl": "Session Affinity TTL",
           "force_model_prefix": "Force Model Prefix",
           "force_model_prefix_desc": "Unprefixed model requests only use credentials without prefix",
+          "session_affinity": "Session Affinity Routing",
           "ws_auth": "WebSocket Authentication",
           "ws_auth_desc": "Enable WebSocket authentication (/v1/ws)"
         },
@@ -1800,6 +1803,7 @@
   "language": {
     "switch": "Language",
     "chinese": "中文",
+    "chinese_tw": "Traditional Chinese (Taiwan)",
     "english": "English",
     "russian": "Русский"
   },

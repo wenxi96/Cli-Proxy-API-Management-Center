@@ -889,6 +889,18 @@ function getNextDirtyFields(
       )
     );
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingSessionAffinity')) {
+    updateDirty(
+      'routingSessionAffinity',
+      nextValues.routingSessionAffinity === baselineValues.routingSessionAffinity
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'routingSessionAffinityTTL')) {
+    updateDirty(
+      'routingSessionAffinityTTL',
+      nextValues.routingSessionAffinityTTL === baselineValues.routingSessionAffinityTTL
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'payloadDefaultRules')) {
     updateDirty(
       'payloadDefaultRules',
@@ -1096,6 +1108,19 @@ export function useVisualConfig() {
             scopedPoolDefaults?.idleLogThrottleSeconds
         ),
         routingScopedPoolProviders: parseScopedPoolProviderEntries(scopedPool?.providers),
+        routingSessionAffinity: Boolean(
+          routing?.['session-affinity'] ??
+            routing?.sessionAffinity ??
+            routing?.['sessionAffinity']
+        ),
+        routingSessionAffinityTTL:
+          typeof routing?.['session-affinity-ttl'] === 'string'
+            ? routing['session-affinity-ttl']
+            : typeof routing?.sessionAffinityTTL === 'string'
+              ? routing.sessionAffinityTTL
+              : typeof routing?.['sessionAffinityTTL'] === 'string'
+                ? routing['sessionAffinityTTL']
+                : '',
 
         payloadDefaultRules: parsePayloadRules(payload?.default),
         payloadDefaultRawRules: parseRawPayloadRules(payload?.['default-raw']),
@@ -1232,7 +1257,9 @@ export function useVisualConfig() {
           values.routingStrategy !== 'round-robin' ||
           values.routingScopedPoolEnabled ||
           hasScopedPoolConfig ||
-          docHas(doc, ['routing', 'scoped-pool'])
+          docHas(doc, ['routing', 'scoped-pool']) ||
+          values.routingSessionAffinity ||
+          values.routingSessionAffinityTTL.trim()
         ) {
           ensureMapInDoc(doc, ['routing']);
           doc.setIn(['routing', 'strategy'], values.routingStrategy);
@@ -1293,6 +1320,12 @@ export function useVisualConfig() {
 
             deleteIfMapEmpty(doc, ['routing', 'scoped-pool']);
           }
+          setBooleanInDoc(doc, ['routing', 'session-affinity'], values.routingSessionAffinity);
+          setStringInDoc(
+            doc,
+            ['routing', 'session-affinity-ttl'],
+            values.routingSessionAffinityTTL
+          );
           deleteIfMapEmpty(doc, ['routing']);
         }
 
