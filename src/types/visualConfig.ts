@@ -117,6 +117,8 @@ export type VisualConfigValues = {
   routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: string;
   routingScopedPoolDefaultsIdleLogThrottleSeconds: string;
   routingScopedPoolProviders: VisualScopedPoolProviderEntry[];
+  routingSessionAffinity: boolean;
+  routingSessionAffinityTTL: string;
   wsAuth: boolean;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
@@ -166,6 +168,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: '',
   routingScopedPoolDefaultsIdleLogThrottleSeconds: '',
   routingScopedPoolProviders: [],
+  routingSessionAffinity: false,
+  routingSessionAffinityTTL: '',
   wsAuth: false,
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],

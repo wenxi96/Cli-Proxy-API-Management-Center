@@ -29,7 +29,7 @@ import {
   buildScopedPoolBindings,
   createEmptyScopedPoolBindings,
 } from '@/utils/scopedPool';
-import { indexUsageDetailsBySource } from '@/utils/usageIndex';
+import { indexUsageDetailsByAuthIndex, indexUsageDetailsBySource } from '@/utils/usageIndex';
 import styles from './AiProvidersPage.module.scss';
 
 export function AiProvidersPage() {
@@ -80,6 +80,10 @@ export function AiProvidersPage() {
   });
   const usageDetailsBySource = useMemo(
     () => indexUsageDetailsBySource(usageDetails),
+    [usageDetails]
+  );
+  const usageDetailsByAuthIndex = useMemo(
+    () => indexUsageDetailsByAuthIndex(usageDetails),
     [usageDetails]
   );
 
@@ -421,16 +425,17 @@ export function AiProvidersPage() {
         {error && <div className="error-box">{error}</div>}
 
         <div id="provider-gemini">
-        <GeminiSection
-          configs={geminiKeys}
-          keyStats={keyStats}
-          usageDetailsBySource={usageDetailsBySource}
-          loading={loading}
-          disableControls={disableControls}
-          isSwitching={isSwitching}
-          scopedPoolSummary={scopedPoolStatus?.providers?.gemini}
-          scopedPoolStatuses={scopedPoolBindings.gemini}
-          onAdd={() => openEditor('/ai-providers/gemini/new')}
+          <GeminiSection
+            configs={geminiKeys}
+            keyStats={keyStats}
+            usageDetailsBySource={usageDetailsBySource}
+            usageDetailsByAuthIndex={usageDetailsByAuthIndex}
+            loading={loading}
+            disableControls={disableControls}
+            isSwitching={isSwitching}
+            scopedPoolSummary={scopedPoolStatus?.providers?.gemini}
+            scopedPoolStatuses={scopedPoolBindings.gemini}
+            onAdd={() => openEditor('/ai-providers/gemini/new')}
             onEdit={(index) => openEditor(`/ai-providers/gemini/${index}`)}
             onDelete={deleteGemini}
             onToggle={(index, enabled) => void setConfigEnabled('gemini', index, enabled)}
@@ -442,6 +447,7 @@ export function AiProvidersPage() {
           configs={codexConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
+            usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
           disableControls={disableControls}
           isSwitching={isSwitching}
@@ -459,6 +465,7 @@ export function AiProvidersPage() {
           configs={claudeConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
+            usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
           disableControls={disableControls}
           isSwitching={isSwitching}
@@ -476,6 +483,7 @@ export function AiProvidersPage() {
           configs={vertexConfigs}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
+            usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
           disableControls={disableControls}
           isSwitching={isSwitching}
@@ -503,6 +511,7 @@ export function AiProvidersPage() {
           configs={openaiProviders}
             keyStats={keyStats}
             usageDetailsBySource={usageDetailsBySource}
+            usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
           disableControls={disableControls}
           isSwitching={isSwitching}
