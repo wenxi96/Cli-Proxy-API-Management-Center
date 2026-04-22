@@ -153,6 +153,10 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
   }
   const prefix = normalizePrefix(record?.prefix ?? record?.['prefix']);
   if (prefix) config.prefix = prefix;
+  const displayName = normalizePrefix(
+    record?.['display-name'] ?? record?.displayName ?? record?.['display_name']
+  );
+  if (displayName) config.displayName = displayName;
   const baseUrl = record ? record['base-url'] ?? record.baseUrl : undefined;
   const proxyUrl = record ? record['proxy-url'] ?? record.proxyUrl : undefined;
   if (baseUrl) config.baseUrl = String(baseUrl);
@@ -222,6 +226,10 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   }
   const prefix = normalizePrefix(record?.prefix ?? record?.['prefix']);
   if (prefix) config.prefix = prefix;
+  const displayName = normalizePrefix(
+    record?.['display-name'] ?? record?.displayName ?? record?.['display_name']
+  );
+  if (displayName) config.displayName = displayName;
   const baseUrl = record ? record['base-url'] ?? record.baseUrl ?? record['base_url'] : undefined;
   if (baseUrl) config.baseUrl = String(baseUrl);
   const proxyUrl = record ? record['proxy-url'] ?? record.proxyUrl ?? record['proxy_url'] : undefined;
