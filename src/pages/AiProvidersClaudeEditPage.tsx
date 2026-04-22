@@ -334,6 +334,14 @@ export function AiProvidersClaudeEditPage() {
               disabled={saving || disableControls || isTesting}
             />
             <Input
+              label={t('ai_providers.display_name_label')}
+              placeholder={t('ai_providers.display_name_placeholder')}
+              value={form.displayName ?? ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
+              hint={t('ai_providers.display_name_hint')}
+              disabled={saving || disableControls || isTesting}
+            />
+            <Input
               label={t('ai_providers.claude_add_modal_url_label')}
               value={form.baseUrl ?? ''}
               onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}

@@ -27,6 +27,8 @@ export interface GeminiKeyConfig {
   apiKey: string;
   priority?: number;
   prefix?: string;
+  // 凭证在统计/日志中的展示名；留空则回退到 prefix，再回退到 "Gemini #N"。
+  displayName?: string;
   baseUrl?: string;
   proxyUrl?: string;
   models?: ModelAlias[];
@@ -39,6 +41,8 @@ export interface ProviderKeyConfig {
   apiKey: string;
   priority?: number;
   prefix?: string;
+  // 凭证在统计/日志中的展示名；留空则回退到 prefix，再回退到 "{Provider} #N"。
+  displayName?: string;
   baseUrl?: string;
   websockets?: boolean;
   proxyUrl?: string;

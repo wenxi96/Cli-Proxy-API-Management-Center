@@ -68,6 +68,7 @@ type CodexFormBaseline = {
   apiKey: string;
   priority: number | null;
   prefix: string;
+  displayName: string;
   baseUrl: string;
   websockets: boolean;
   proxyUrl: string;
@@ -81,6 +82,7 @@ const buildCodexBaseline = (form: ProviderFormState): CodexFormBaseline => ({
   priority:
     form.priority !== undefined && Number.isFinite(form.priority) ? Math.trunc(form.priority) : null,
   prefix: String(form.prefix ?? '').trim(),
+  displayName: String(form.displayName ?? '').trim(),
   baseUrl: String(form.baseUrl ?? '').trim(),
   websockets: Boolean(form.websockets),
   proxyUrl: String(form.proxyUrl ?? '').trim(),
@@ -232,6 +234,7 @@ export function AiProvidersCodexEditPage() {
     baseline.apiKey !== form.apiKey.trim() ||
     baseline.priority !== normalizedPriority ||
     baseline.prefix !== String(form.prefix ?? '').trim() ||
+    baseline.displayName !== String(form.displayName ?? '').trim() ||
     baseline.baseUrl !== String(form.baseUrl ?? '').trim() ||
     baseline.websockets !== Boolean(form.websockets) ||
     baseline.proxyUrl !== String(form.proxyUrl ?? '').trim() ||
@@ -449,6 +452,7 @@ export function AiProvidersCodexEditPage() {
         apiKey: form.apiKey.trim(),
         priority: form.priority !== undefined ? Math.trunc(form.priority) : undefined,
         prefix: form.prefix?.trim() || undefined,
+        displayName: form.displayName?.trim() || undefined,
         baseUrl,
         websockets: Boolean(form.websockets),
         proxyUrl: form.proxyUrl?.trim() || undefined,
@@ -572,6 +576,14 @@ export function AiProvidersCodexEditPage() {
               value={form.prefix ?? ''}
               onChange={(e) => setForm((prev) => ({ ...prev, prefix: e.target.value }))}
               hint={t('ai_providers.prefix_hint')}
+              disabled={disableControls || saving}
+            />
+            <Input
+              label={t('ai_providers.display_name_label')}
+              placeholder={t('ai_providers.display_name_placeholder')}
+              value={form.displayName ?? ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
+              hint={t('ai_providers.display_name_hint')}
               disabled={disableControls || saving}
             />
             <Input

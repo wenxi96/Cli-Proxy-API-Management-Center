@@ -24,6 +24,7 @@ export type ClaudeEditBaseline = {
   apiKey: string;
   priority: number | null;
   prefix: string;
+  displayName: string;
   baseUrl: string;
   proxyUrl: string;
   headers: Array<{ key: string; value: string }>;

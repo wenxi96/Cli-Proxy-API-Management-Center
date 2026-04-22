@@ -65,6 +65,7 @@ type GeminiFormBaseline = {
   apiKey: string;
   priority: number | null;
   prefix: string;
+  displayName: string;
   baseUrl: string;
   proxyUrl: string;
   headers: ReturnType<typeof normalizeHeaderEntries>;
@@ -77,6 +78,7 @@ const buildGeminiBaseline = (form: GeminiFormState): GeminiFormBaseline => ({
   priority:
     form.priority !== undefined && Number.isFinite(form.priority) ? Math.trunc(form.priority) : null,
   prefix: String(form.prefix ?? '').trim(),
+  displayName: String(form.displayName ?? '').trim(),
   baseUrl: String(form.baseUrl ?? '').trim(),
   proxyUrl: String(form.proxyUrl ?? '').trim(),
   headers: normalizeHeaderEntries(form.headers),
@@ -415,6 +417,7 @@ export function AiProvidersGeminiEditPage() {
     baseline.apiKey !== form.apiKey.trim() ||
     baseline.priority !== normalizedPriority ||
     baseline.prefix !== String(form.prefix ?? '').trim() ||
+    baseline.displayName !== String(form.displayName ?? '').trim() ||
     baseline.baseUrl !== String(form.baseUrl ?? '').trim() ||
     baseline.proxyUrl !== String(form.proxyUrl ?? '').trim() ||
     isHeadersDirty ||
@@ -450,6 +453,7 @@ export function AiProvidersGeminiEditPage() {
         apiKey: form.apiKey.trim(),
         priority: form.priority !== undefined ? Math.trunc(form.priority) : undefined,
         prefix: form.prefix?.trim() || undefined,
+        displayName: form.displayName?.trim() || undefined,
         baseUrl: form.baseUrl?.trim() || undefined,
         proxyUrl: form.proxyUrl?.trim() || undefined,
         headers: buildHeaderObject(form.headers),
@@ -568,6 +572,14 @@ export function AiProvidersGeminiEditPage() {
               value={form.prefix ?? ''}
               onChange={(e) => setForm((prev) => ({ ...prev, prefix: e.target.value }))}
               hint={t('ai_providers.prefix_hint')}
+              disabled={disableControls || saving}
+            />
+            <Input
+              label={t('ai_providers.display_name_label')}
+              placeholder={t('ai_providers.display_name_placeholder')}
+              value={form.displayName ?? ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
+              hint={t('ai_providers.display_name_hint')}
               disabled={disableControls || saving}
             />
             <Input

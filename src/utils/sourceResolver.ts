@@ -67,7 +67,7 @@ export function buildSourceInfoMap(input: SourceInfoMapInput): SourceInfoMap {
   };
 
   const providers: Array<{
-    items: Array<{ apiKey?: string; prefix?: string; authIndex?: string }>;
+    items: Array<{ apiKey?: string; prefix?: string; displayName?: string; authIndex?: string }>;
     type: string;
     label: string;
   }> = [
@@ -81,7 +81,9 @@ export function buildSourceInfoMap(input: SourceInfoMapInput): SourceInfoMap {
     items.forEach((item, index) => {
       registerProvider(
         {
-          displayName: item.prefix?.trim() || `${label} #${index + 1}`,
+          // 优先用户自定义 displayName，其次 prefix（其本身为路由命名空间），最后回退 "{label} #N"
+          displayName:
+            item.displayName?.trim() || item.prefix?.trim() || `${label} #${index + 1}`,
           type,
           identityKey: buildProviderIdentityKey(type, index),
         },
