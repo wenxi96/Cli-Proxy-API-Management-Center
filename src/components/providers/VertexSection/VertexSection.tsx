@@ -186,7 +186,7 @@ export function VertexSection({
             return (
               <Fragment>
                 <div className="item-title">
-                  {t('ai_providers.vertex_item_title')} #{index + 1}
+                  {item.displayName?.trim() || `${t('ai_providers.vertex_item_title')} #${index + 1}`}
                 </div>
                 <div className={styles.fieldRow}>
                   <span className={styles.fieldLabel}>{t('common.api_key')}:</span>
