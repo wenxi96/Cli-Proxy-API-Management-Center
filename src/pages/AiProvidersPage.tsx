@@ -100,10 +100,11 @@ export function AiProvidersPage() {
     }
     setError('');
     try {
-      const [configResult, vertexResult, ampcodeResult] = await Promise.allSettled([
+      const [configResult, vertexResult, ampcodeResult, openaiResult] = await Promise.allSettled([
         fetchConfig(),
         providersApi.getVertexConfigs(),
         ampcodeApi.getAmpcode(),
+        providersApi.getOpenAIProviders(),
       ]);
       const scopedPoolResult = await Promise.allSettled([providersApi.getScopedPoolStatus()]);
 
@@ -127,6 +128,12 @@ export function AiProvidersPage() {
       if (ampcodeResult.status === 'fulfilled') {
         updateConfigValue('ampcode', ampcodeResult.value);
         clearCache('ampcode');
+      }
+
+      if (openaiResult.status === 'fulfilled') {
+        setOpenaiProviders(openaiResult.value || []);
+        updateConfigValue('openai-compatibility', openaiResult.value || []);
+        clearCache('openai-compatibility');
       }
 
       const scopedPoolValue = scopedPoolResult[0];
