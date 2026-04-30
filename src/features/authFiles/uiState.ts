@@ -6,6 +6,7 @@ export type AuthFilesUiState = {
   filter?: string;
   problemOnly?: boolean;
   enabledOnly?: boolean;
+  disabledOnly?: boolean;
   compactMode?: boolean;
   search?: string;
   page?: number;

@@ -158,7 +158,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
   quotaAutoDisableAuthFileOnZeroQuota: false,
-  quotaAntigravityCredits: true,
+  quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',
   routingScopedPoolEnabled: false,
   routingScopedPoolDefaultsLimit: '',
