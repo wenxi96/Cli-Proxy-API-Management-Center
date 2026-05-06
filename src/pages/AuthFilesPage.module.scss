@@ -147,6 +147,9 @@
 
   @include mobile {
     width: 100%;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    justify-content: stretch;
   }
 }
 
@@ -157,6 +160,11 @@
   flex: 1 1 320px;
   min-width: 0;
   max-width: 420px;
+
+  @include mobile {
+    flex: 1 1 100%;
+    max-width: none;
+  }
 }
 
 .batchCheckConcurrencyControl {
@@ -165,6 +173,10 @@
   gap: 6px;
   flex: 0 0 116px;
   min-width: 116px;
+
+  @include mobile {
+    flex: 1 1 116px;
+  }
 }
 
 .batchCheckConcurrencyInput {
@@ -175,12 +187,22 @@
   border-radius: 10px;
   background: var(--bg-primary);
   color: var(--text-primary);
+
+  @include mobile {
+    width: 100%;
+  }
 }
 
 .batchCheckStartButton {
   flex: 0 0 auto;
   align-self: flex-end;
   white-space: nowrap;
+
+  @include mobile {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-height: 38px;
+  }
 }
 
 .batchCheckScopeLabel {
