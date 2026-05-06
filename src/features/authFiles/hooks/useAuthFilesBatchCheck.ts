@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInterval } from '@/hooks/useInterval';
 import { authFilesApi } from '@/services/api';
-import { useNotificationStore } from '@/stores';
+import { useBatchCheckStore, useNotificationStore } from '@/stores';
 import type {
   AuthFileBatchCheckAggregate,
   AuthFileBatchCheckDiagnosis,
@@ -57,7 +57,7 @@ const BATCH_CHECK_REENABLE_BUCKET_RANKS: Record<string, number> = {
   very_high: 6,
   full: 7,
 };
-const BATCH_CHECK_DEFAULT_REENABLE_THRESHOLD = 'danger';
+const BATCH_CHECK_DEFAULT_REENABLE_THRESHOLD = 'alert';
 
 const roundBatchCheckValue = (value: number): number => Math.round(value * 100) / 100;
 
@@ -471,13 +471,17 @@ export function useAuthFilesBatchCheck(): UseAuthFilesBatchCheckResult {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
 
-  const [checking, setChecking] = useState(false);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [batchCheckJob, setBatchCheckJob] = useState<AuthFileBatchCheckJobResponse | null>(null);
-  const [batchCheckResponse, setBatchCheckResponse] = useState<AuthFilesBatchCheckResponse | null>(
-    null
-  );
-  const [lastRequestedNames, setLastRequestedNames] = useState<string[]>([]);
+  const checking = useBatchCheckStore((state) => state.checking);
+  const activeJobId = useBatchCheckStore((state) => state.activeJobId);
+  const batchCheckJob = useBatchCheckStore((state) => state.batchCheckJob);
+  const batchCheckResponse = useBatchCheckStore((state) => state.batchCheckResponse);
+  const lastRequestedNames = useBatchCheckStore((state) => state.lastRequestedNames);
+  const setChecking = useBatchCheckStore((state) => state.setChecking);
+  const setActiveJobId = useBatchCheckStore((state) => state.setActiveJobId);
+  const setBatchCheckJob = useBatchCheckStore((state) => state.setBatchCheckJob);
+  const setBatchCheckResponse = useBatchCheckStore((state) => state.setBatchCheckResponse);
+  const setLastRequestedNames = useBatchCheckStore((state) => state.setLastRequestedNames);
+  const clearStore = useBatchCheckStore((state) => state.clear);
   const pollingRef = useRef(false);
   const activeJobIdRef = useRef<string | null>(null);
 
@@ -536,7 +540,7 @@ export function useAuthFilesBatchCheck(): UseAuthFilesBatchCheckResult {
 
       setChecking(true);
     },
-    [showNotification, t]
+    [setActiveJobId, setBatchCheckJob, setBatchCheckResponse, setChecking, showNotification, t]
   );
 
   const pollJob = useCallback(
@@ -561,7 +565,7 @@ export function useAuthFilesBatchCheck(): UseAuthFilesBatchCheckResult {
         pollingRef.current = false;
       }
     },
-    [applyJobSnapshot, showNotification, t]
+    [applyJobSnapshot, setActiveJobId, setChecking, showNotification, t]
   );
 
   const runBatchCheck = useCallback(
@@ -605,17 +609,23 @@ export function useAuthFilesBatchCheck(): UseAuthFilesBatchCheckResult {
         return null;
       }
     },
-    [pollJob, showNotification, t]
+    [
+      applyJobSnapshot,
+      pollJob,
+      setActiveJobId,
+      setBatchCheckJob,
+      setBatchCheckResponse,
+      setChecking,
+      setLastRequestedNames,
+      showNotification,
+      t,
+    ]
   );
 
   const clearBatchCheck = useCallback(() => {
-    setChecking(false);
     activeJobIdRef.current = null;
-    setActiveJobId(null);
-    setBatchCheckJob(null);
-    setBatchCheckResponse(null);
-    setLastRequestedNames([]);
-  }, []);
+    clearStore();
+  }, [clearStore]);
 
   useInterval(
     () => {
