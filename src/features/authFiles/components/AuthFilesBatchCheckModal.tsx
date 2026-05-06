@@ -1437,14 +1437,14 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                       )
                   )}
                   {renderDistributionCard(
-                    t('auth_files.batch_check_action_reenable_recovered'),
+                    t('auth_files.batch_check_action_reenable_available'),
                     formatNumber(aggregate.action_candidates.reenable_names.length),
-                    t('auth_files.batch_check_action_reenable_recovered_hint'),
+                    t('auth_files.batch_check_action_reenable_available_hint'),
                     () =>
                       openActionDetail(
-                        t('auth_files.batch_check_action_reenable_recovered'),
+                        t('auth_files.batch_check_action_reenable_available'),
                         t('auth_files.batch_check_detail_action_desc', {
-                          action: t('auth_files.batch_check_action_reenable_recovered'),
+                          action: t('auth_files.batch_check_action_reenable_available'),
                         }),
                         aggregate.action_candidates.reenable_names,
                         t('auth_files.batch_check_detail_reenable_note')

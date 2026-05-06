@@ -45,6 +45,7 @@ import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { AuthFilesBatchCheckModal } from '@/features/authFiles/components/AuthFilesBatchCheckModal';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
+import { ReenableTieredModal } from '@/features/authFiles/components/ReenableTieredModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
 import {
@@ -279,6 +280,11 @@ export function AuthFilesPage() {
   const [authFilesScopedPoolModalOpen, setAuthFilesScopedPoolModalOpen] = useState(false);
   const [lastBatchCheckScope, setLastBatchCheckScope] = useState<BatchCheckScope>('page');
   const [batchCheckActionPending, setBatchCheckActionPending] = useState<BatchCheckDirectAction | null>(null);
+  const [reenableTieredModalOpen, setReenableTieredModalOpen] = useState(false);
+  // Bumps each time the reenable modal opens; passed as React `key` to the modal so
+  // its internal useState initializers re-run with fresh state on every open
+  // (instead of using setState-in-effect to reset).
+  const [reenableModalSession, setReenableModalSession] = useState(0);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
@@ -1183,19 +1189,30 @@ export function AuthFilesPage() {
   const handleReenableRecovered = useCallback(() => {
     const names = batchCheckActionCandidates?.reenable_names ?? [];
     if (names.length === 0) return;
+    setReenableModalSession((s) => s + 1);
+    setReenableTieredModalOpen(true);
+  }, [batchCheckActionCandidates]);
 
-    handleBatchCheckSummaryAction(
-      'reenable_recovered',
-      t('auth_files.batch_check_action_reenable_recovered'),
-      t('auth_files.batch_check_confirm_reenable_recovered', {
-        count: names.length,
-        bucket: t(
-          `auth_files.batch_check_bucket_${batchCheckActionCandidates?.reenable_threshold_bucket ?? 'danger'}`
-        ),
-      }),
-      () => batchSetStatus(names, true)
-    );
-  }, [batchCheckActionCandidates, batchSetStatus, handleBatchCheckSummaryAction, t]);
+  const handleReenableTieredConfirm = useCallback(
+    async (selectedNames: string[]) => {
+      if (selectedNames.length === 0) return;
+      setBatchCheckActionPending('reenable_recovered');
+      try {
+        await batchSetStatus(selectedNames, true);
+        setReenableTieredModalOpen(false);
+      } finally {
+        setBatchCheckActionPending((current) =>
+          current === 'reenable_recovered' ? null : current
+        );
+      }
+    },
+    [batchSetStatus]
+  );
+
+  const handleReenableTieredClose = useCallback(() => {
+    if (batchCheckActionPending === 'reenable_recovered') return;
+    setReenableTieredModalOpen(false);
+  }, [batchCheckActionPending]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1644,7 +1661,7 @@ export function AuthFilesPage() {
                     }
                     loading={batchCheckActionPending === 'reenable_recovered'}
                   >
-                    {`${t('auth_files.batch_check_action_reenable_recovered')} (${batchCheckActionCandidates?.reenable_names.length ?? 0})`}
+                    {`${t('auth_files.batch_check_action_reenable_available')} (${batchCheckActionCandidates?.reenable_names.length ?? 0})`}
                   </Button>
                 </div>
               </div>
@@ -1936,6 +1953,16 @@ export function AuthFilesPage() {
         response={liveBatchCheckResponse}
         focusName={batchCheckFocusName}
         onClose={handleCloseBatchCheckDetails}
+      />
+
+      <ReenableTieredModal
+        key={`reenable-${reenableModalSession}`}
+        open={reenableTieredModalOpen}
+        results={liveBatchCheckResponse?.results ?? []}
+        reenableNames={batchCheckActionCandidates?.reenable_names ?? []}
+        onConfirm={handleReenableTieredConfirm}
+        onClose={handleReenableTieredClose}
+        loading={batchCheckActionPending === 'reenable_recovered'}
       />
 
       <Modal
