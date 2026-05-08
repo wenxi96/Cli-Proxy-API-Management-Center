@@ -497,11 +497,10 @@
 
 .filterControls {
   display: grid;
-  grid-template-columns: minmax(240px, 1.35fr) repeat(2, minmax(120px, 0.72fr)) minmax(360px, 1fr);
+  grid-template-columns: minmax(240px, 1.5fr) minmax(120px, 0.72fr) minmax(140px, 0.9fr);
   gap: $spacing-md;
   align-items: flex-end;
 
-  // 修复 Input 组件在 filterItem 中的嵌套样式
   :global(.form-group) {
     margin: 0;
   }
@@ -538,26 +537,21 @@
 
 .filterToggleItem {
   min-width: 0;
-
-  @include tablet {
-    grid-column: 1 / -1;
-  }
+  grid-column: 1 / -1;
 }
 
 .filterToggleGroup {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 8px;
-  min-height: 40px;
+  align-items: stretch;
 }
 
 .filterToggleCard {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
@@ -576,7 +570,8 @@
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .pageSizeSelect {
@@ -3007,7 +3002,7 @@
 
 .batchCheckDetailFacts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 8px;
 }
 
@@ -3166,4 +3161,276 @@
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* === Batch check optimization pass === */
+
+/* Risk metric "0" muted state */
+.batchCheckMetricMuted {
+  opacity: 0.5;
+
+  .batchCheckMetricValue {
+    color: var(--text-tertiary);
+  }
+}
+
+/* Health bucket card muted (count = 0) */
+.batchCheckHealthCardMuted {
+  opacity: 0.5;
+}
+
+/* Highlight strip for the "action candidates" rolled-up section at modal top */
+.batchCheckActionCandidatesSection {
+  border-left: 3px solid color-mix(in srgb, var(--primary-color) 70%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 4%, transparent);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+/* Health tier rollup colors */
+.batchCheckHealthTier_healthy {
+  border-color: color-mix(in srgb, var(--success-color, #16a34a) 35%, transparent);
+
+  .batchCheckHealthBarFill {
+    background: color-mix(in srgb, var(--success-color, #16a34a) 70%, transparent);
+  }
+}
+
+.batchCheckHealthTier_warning {
+  border-color: color-mix(in srgb, var(--warning-text, #b45309) 35%, transparent);
+
+  .batchCheckHealthBarFill {
+    background: color-mix(in srgb, var(--warning-text, #b45309) 70%, transparent);
+  }
+}
+
+.batchCheckHealthTier_critical {
+  border-color: color-mix(in srgb, var(--danger-color, #dc2626) 35%, transparent);
+
+  .batchCheckHealthBarFill {
+    background: color-mix(in srgb, var(--danger-color, #dc2626) 70%, transparent);
+  }
+}
+
+.batchCheckHealthTier_unknown {
+  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.batchCheckHealthToggle {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--primary-color) 40%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+  }
+}
+
+/* Detail modal toolbar (filter + sort) */
+.batchCheckDetailToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.batchCheckDetailToolbarInput {
+  flex: 1 1 240px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.batchCheckDetailToolbarSelect {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Page-level hero metric grouping */
+.batchCheckHeroGroupLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-top: 8px;
+}
+
+.batchCheckHeroCardMuted {
+  opacity: 0.55;
+
+  .batchCheckHeroValue {
+    color: var(--text-tertiary);
+  }
+}
+
+/* Distribution card variants for Refresh vs Plan */
+.batchCheckDistributionCardRefresh {
+  border-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
+}
+
+.batchCheckDistributionCardPlan {
+  border-color: color-mix(in srgb, #8b5cf6 30%, transparent);
+}
+
+/* Detail entry error: collapsible raw payload */
+.batchCheckDetailEntryErrorRaw {
+  margin-top: 6px;
+
+  > summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+}
+
+.batchCheckDetailEntryErrorRawPre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-tertiary, #1f2937) 80%, transparent);
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* Classification badge palette (variant="classification") */
+.batchCheckBadgeNeutral {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+}
+
+.batchCheckBadgeClassification_ok {
+  color: var(--success-badge-text, #065f46);
+  background: color-mix(in srgb, var(--success-badge-bg, #d1fae5) 60%, transparent);
+}
+
+.batchCheckBadgeClassification_no_quota,
+.batchCheckBadgeClassification_invalidated_401 {
+  color: var(--danger-color, #dc2626);
+  background: color-mix(in srgb, var(--danger-color, #dc2626) 12%, transparent);
+}
+
+.batchCheckBadgeClassification_api_error,
+.batchCheckBadgeClassification_request_failed {
+  color: var(--warning-text, #b45309);
+  background: color-mix(in srgb, var(--warning-bg, #fef3c7) 65%, transparent);
+}
+
+.batchCheckBadgeClassification_unsupported_provider,
+.batchCheckBadgeClassification_disabled,
+.batchCheckBadgeClassification_runtime_only,
+.batchCheckBadgeClassification_auth_not_found,
+.batchCheckBadgeClassification_unknown {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+}
+
+/* Bucket badge palette (variant="bucket") - outline style with color hint */
+.batchCheckBadgeBucket_full,
+.batchCheckBadgeBucket_very_high,
+.batchCheckBadgeBucket_high,
+.batchCheckBadgeBucket_usable {
+  color: var(--success-badge-text, #065f46);
+  border-color: color-mix(in srgb, var(--success-color, #16a34a) 40%, transparent);
+}
+
+.batchCheckBadgeBucket_fair,
+.batchCheckBadgeBucket_alert {
+  color: var(--warning-text, #b45309);
+  border-color: color-mix(in srgb, var(--warning-text, #b45309) 40%, transparent);
+}
+
+.batchCheckBadgeBucket_danger,
+.batchCheckBadgeBucket_exhausted {
+  color: var(--danger-color, #dc2626);
+  border-color: color-mix(in srgb, var(--danger-color, #dc2626) 40%, transparent);
+}
+
+.batchCheckBadgeBucket_unknown {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+/* V4: thicken health bar from 4 to 8 px */
+.batchCheckHealthBarTrack {
+  min-height: 8px !important;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* V5: long file name ellipsis + show full on hover */
+.batchCheckDetailEntryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Progress-bar style fact (variant="progress") */
+.batchCheckDetailFactProgressRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.batchCheckDetailFactProgressTrack {
+  flex: 1;
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 35%, transparent);
+  overflow: hidden;
+}
+
+.batchCheckDetailFactProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 200ms ease-out;
+}
+
+.batchCheckDetailFactProgressTrack_healthy .batchCheckDetailFactProgressFill,
+.batchCheckDetailFactProgressFill_healthy {
+  background: var(--success-color, #16a34a);
+}
+
+.batchCheckDetailFactProgressTrack_warning .batchCheckDetailFactProgressFill,
+.batchCheckDetailFactProgressFill_warning {
+  background: var(--warning-text, #b45309);
+}
+
+.batchCheckDetailFactProgressTrack_critical .batchCheckDetailFactProgressFill,
+.batchCheckDetailFactProgressFill_critical {
+  background: var(--danger-color, #dc2626);
+}
+
+.batchCheckDetailFactProgressValue {
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }

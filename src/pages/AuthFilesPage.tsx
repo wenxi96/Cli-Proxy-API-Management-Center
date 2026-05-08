@@ -920,71 +920,101 @@ export function AuthFilesPage() {
       ((liveBatchCheckResponse.results ?? []).length > 0 || (liveBatchCheckResponse.skipped ?? []).length > 0)
   );
   const batchCheckActionCandidates = batchCheckDisplayAggregate?.action_candidates ?? null;
-  const batchCheckHeroMetrics = useMemo(() => {
+  const batchCheckHeroMetrics = useMemo<
+    Array<{
+      key: string;
+      label: string;
+      value: string;
+      hint?: string;
+      group: 'capacity' | 'risk';
+      muted?: boolean;
+    }>
+  >(() => {
     if (!batchCheckDisplaySummary || !batchCheckDisplayAggregate) return [];
 
+    const risk = batchCheckDisplayAggregate.risk_overview;
     return [
+      // === Capacity / scope group: always-relevant headline numbers ===
       {
         key: 'remaining',
         label: t('auth_files.batch_check_total_remaining'),
         value: `${formatNumber(batchCheckDisplayAggregate.capacity_overview.remaining_total)} / ${formatNumber(batchCheckDisplayAggregate.capacity_overview.total_capacity)}`,
         hint: formatBatchCheckPercent(batchCheckDisplayAggregate.capacity_overview.remaining_percent),
+        group: 'capacity',
       },
       {
         key: 'equivalent',
         label: t('auth_files.batch_check_equivalent_accounts'),
         value: formatBatchCheckNumber(batchCheckDisplayAggregate.capacity_overview.equivalent_full_accounts),
+        group: 'capacity',
       },
       {
         key: 'available',
         label: t('auth_files.batch_check_available_count'),
         value: formatNumber(batchCheckDisplaySummary.available_count),
+        group: 'capacity',
       },
       {
         key: 'processed',
         label: t('auth_files.batch_check_processed_count'),
         value: formatNumber(batchCheckDisplayAggregate.scope_overview.processed_count),
         hint: t('auth_files.batch_check_scope_count', { count: lastRequestedNames.length }),
+        group: 'capacity',
       },
       {
         key: 'enabled',
         label: t('auth_files.batch_check_enabled_count'),
         value: formatNumber(batchCheckDisplayAggregate.scope_overview.enabled_count),
+        group: 'capacity',
       },
       {
         key: 'disabled',
         label: t('auth_files.batch_check_disabled_count'),
         value: formatNumber(batchCheckDisplayAggregate.scope_overview.disabled_count),
+        group: 'capacity',
       },
+      // === Risk group: muted when count is 0 to fade out the noise ===
       {
         key: 'invalidated',
         label: t('auth_files.batch_check_invalidated_count'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.invalidated_401_count),
+        value: formatNumber(risk.invalidated_401_count),
+        group: 'risk',
+        muted: risk.invalidated_401_count === 0,
       },
       {
         key: 'noQuota',
         label: t('auth_files.batch_check_no_quota_count'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.no_quota_count),
+        value: formatNumber(risk.no_quota_count),
+        group: 'risk',
+        muted: risk.no_quota_count === 0,
       },
       {
         key: 'apiError',
         label: t('auth_files.batch_check_api_error_count'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.api_error_count),
+        value: formatNumber(risk.api_error_count),
+        group: 'risk',
+        muted: risk.api_error_count === 0,
       },
       {
         key: 'requestFailed',
         label: t('auth_files.batch_check_request_failed_count'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.request_failed_count),
+        value: formatNumber(risk.request_failed_count),
+        group: 'risk',
+        muted: risk.request_failed_count === 0,
       },
       {
         key: 'low129',
         label: t('auth_files.batch_check_low_remaining_1_29'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.low_remaining_1_29_count),
+        value: formatNumber(risk.low_remaining_1_29_count),
+        group: 'risk',
+        muted: risk.low_remaining_1_29_count === 0,
       },
       {
         key: 'low149',
         label: t('auth_files.batch_check_low_remaining_1_49'),
-        value: formatNumber(batchCheckDisplayAggregate.risk_overview.mid_low_remaining_1_49_count),
+        value: formatNumber(risk.mid_low_remaining_1_49_count),
+        group: 'risk',
+        muted: risk.mid_low_remaining_1_49_count === 0,
       },
     ];
   }, [batchCheckDisplayAggregate, batchCheckDisplaySummary, lastRequestedNames.length, t]);
@@ -1596,8 +1626,15 @@ export function AuthFilesPage() {
                 </span>
               </div>
 
+              {batchCheckHeroMetrics.some((item) => item.group === 'capacity') ? (
+                <div className={styles.batchCheckHeroGroupLabel}>
+                  {t('auth_files.batch_check_hero_group_capacity')}
+                </div>
+              ) : null}
               <div className={styles.batchCheckHeroGrid}>
-                {batchCheckHeroMetrics.map((item) => (
+                {batchCheckHeroMetrics
+                  .filter((item) => item.group === 'capacity')
+                  .map((item) => (
                   <div key={item.key} className={styles.batchCheckHeroCard}>
                     <span className={styles.batchCheckHeroLabel}>{item.label}</span>
                     <strong className={styles.batchCheckHeroValue}>{item.value}</strong>
@@ -1605,6 +1642,28 @@ export function AuthFilesPage() {
                   </div>
                 ))}
               </div>
+
+              {batchCheckHeroMetrics.some((item) => item.group === 'risk') ? (
+                <>
+                  <div className={styles.batchCheckHeroGroupLabel}>
+                    {t('auth_files.batch_check_hero_group_risk')}
+                  </div>
+                  <div className={styles.batchCheckHeroGrid}>
+                    {batchCheckHeroMetrics
+                      .filter((item) => item.group === 'risk')
+                      .map((item) => (
+                        <div
+                          key={item.key}
+                          className={`${styles.batchCheckHeroCard}${item.muted ? ` ${styles.batchCheckHeroCardMuted}` : ''}`}
+                        >
+                          <span className={styles.batchCheckHeroLabel}>{item.label}</span>
+                          <strong className={styles.batchCheckHeroValue}>{item.value}</strong>
+                          {item.hint ? <span className={styles.batchCheckHeroHint}>{item.hint}</span> : null}
+                        </div>
+                      ))}
+                  </div>
+                </>
+              ) : null}
 
               <div className={styles.batchCheckActionBar}>
                 <div className={styles.batchCheckActionHint}>

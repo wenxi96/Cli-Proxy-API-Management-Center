@@ -23,6 +23,19 @@ export type AuthFilesBatchCheckModalProps = {
 type BatchCheckDetailFact = {
   label: string;
   value: string;
+  /**
+   * Optional rendering hint. `classification` paints the value with a colored
+   * pill keyed by classification (ok/no_quota/...); `bucket` uses an outline
+   * pill keyed by bucket (full/usable/...); `progress` renders a progress bar
+   * driven by {@link progressPercent}.
+   */
+  variant?: 'classification' | 'bucket' | 'progress';
+  /** Raw key (e.g. 'no_quota', 'usable') used to pick the badge color. */
+  variantKey?: string;
+  /** 0–100 percent for `variant: 'progress'`. */
+  progressPercent?: number;
+  /** Hover tooltip. Used to keep raw upstream payload accessible. */
+  tooltip?: string;
 };
 
 type BatchCheckDiagnosisGroupMeta = {
@@ -38,6 +51,17 @@ type BatchCheckDetailEntry = {
   facts: BatchCheckDetailFact[];
   note?: string;
   error?: string;
+  /**
+   * Optional raw error payload kept verbatim (e.g. JSON returned by the
+   * provider). Rendered in a code block + tooltip while {@link error}
+   * holds the human-friendly summary derived from it.
+   */
+  errorRaw?: string;
+  /** Sort hints used by the detail modal toolbar (remaining %, refresh time). */
+  sortKeys?: {
+    remainingPercent?: number;
+    nextRefreshAtMs?: number;
+  };
 };
 
 type BatchCheckDetailGroup = {
@@ -46,6 +70,8 @@ type BatchCheckDetailGroup = {
   note?: string;
   entries: BatchCheckDetailEntry[];
 };
+
+type DetailSortMode = 'default' | 'remaining_desc' | 'remaining_asc' | 'name_asc' | 'next_refresh_asc';
 
 type BatchCheckDetailState = {
   title: string;
@@ -65,6 +91,19 @@ const HEALTH_BUCKET_META = [
   { key: 'exhausted', range: '= 0%' },
   { key: 'unknown', range: '-' },
 ] as const;
+
+// Three-tier rollup of the nine health buckets. Used for the collapsed
+// default view; the expanded view still shows all nine for advanced users.
+const HEALTH_TIER_META: ReadonlyArray<{
+  id: 'healthy' | 'warning' | 'critical' | 'unknown';
+  range: string;
+  bucketKeys: ReadonlyArray<string>;
+}> = [
+  { id: 'healthy', range: '>=50%', bucketKeys: ['full', 'very_high', 'high', 'usable'] },
+  { id: 'warning', range: '10-49%', bucketKeys: ['fair', 'alert'] },
+  { id: 'critical', range: '<=9%', bucketKeys: ['danger', 'exhausted'] },
+  { id: 'unknown', range: '-', bucketKeys: ['unknown'] },
+];
 
 const DETAIL_WINDOW_KEYS = ['windows', 'buckets', 'rows', 'groups'] as const;
 const DETAIL_PAGE_SIZE = 50;
@@ -267,6 +306,7 @@ const resolveResultRefreshMeta = (result: AuthFileBatchCheckResult, nowMs = Date
     return {
       label: resolveRefreshWindowLabel(earliestResetMs, nowMs),
       reasonKey: '',
+      nextRefreshAtMs: earliestResetMs,
     };
   }
 
@@ -274,6 +314,7 @@ const resolveResultRefreshMeta = (result: AuthFileBatchCheckResult, nowMs = Date
     return {
       label: '未知',
       reasonKey: 'auth_files.batch_check_detail_refresh_unknown_no_window',
+      nextRefreshAtMs: null,
     };
   }
 
@@ -281,6 +322,7 @@ const resolveResultRefreshMeta = (result: AuthFileBatchCheckResult, nowMs = Date
     return {
       label: '未知',
       reasonKey: 'auth_files.batch_check_detail_refresh_unknown_no_reset',
+      nextRefreshAtMs: null,
     };
   }
 
@@ -288,12 +330,14 @@ const resolveResultRefreshMeta = (result: AuthFileBatchCheckResult, nowMs = Date
     return {
       label: '未知',
       reasonKey: 'auth_files.batch_check_detail_refresh_unknown_invalid_reset',
+      nextRefreshAtMs: null,
     };
   }
 
   return {
     label: '未知',
     reasonKey: 'auth_files.batch_check_reason_unknown',
+    nextRefreshAtMs: null,
   };
 };
 
@@ -305,6 +349,97 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const resolveResultIssueMessage = (result: AuthFileBatchCheckResult): string =>
   normalizeText(result.error_message) || normalizeText(result.status_message);
+
+/**
+ * Convert a snake_case identifier (e.g. `auto_disabled_quota_exhausted`) into
+ * sentence case fallback (`Auto disabled quota exhausted`). Caller may also
+ * resolve a localized label first via i18n; this is the no-translation path.
+ */
+const humanizeSnakeCase = (raw: string): string => {
+  const cleaned = raw.replace(/[_-]+/g, ' ').trim();
+  if (!cleaned) return raw;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+};
+
+/**
+ * Format a status / status_message value for display:
+ *   - JSON payload → use {@link summarizeErrorMessage}
+ *   - snake_case enum (e.g. auto_disabled_quota_exhausted) → resolve via i18n
+ *     key `auth_files.batch_check_status_value.<key>`, fall back to humanized
+ *     text when no translation exists
+ *   - plain text → return as-is
+ */
+const formatStatusValue = (raw: string, translate: (key: string) => string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return summarizeErrorMessage(trimmed);
+  }
+
+  if (/^[a-z][a-z0-9_-]*$/.test(trimmed)) {
+    const key = `auth_files.batch_check_status_value.${trimmed}`;
+    const translated = translate(key);
+    if (translated && translated !== key) {
+      return translated;
+    }
+    return humanizeSnakeCase(trimmed);
+  }
+
+  return trimmed;
+};
+
+/**
+ * Reduce a raw provider error payload into a single short, human-friendly
+ * summary. Returns the raw input unchanged if it doesn't look like JSON or
+ * cannot be parsed — callers should keep the raw text in a tooltip.
+ */
+const summarizeErrorMessage = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return trimmed;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const pickString = (...candidates: unknown[]): string => {
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string') {
+          const value = candidate.trim();
+          if (value) return value;
+        }
+      }
+      return '';
+    };
+
+    if (isRecord(parsed)) {
+      const errObj = isRecord(parsed.error) ? parsed.error : null;
+      const detailObj = isRecord(parsed.detail) ? parsed.detail : null;
+      const message = pickString(
+        parsed.message,
+        errObj?.message,
+        detailObj?.message,
+        parsed.reason,
+        parsed.error_description,
+        typeof parsed.detail === 'string' ? parsed.detail : null,
+        typeof parsed.error === 'string' ? parsed.error : null
+      );
+      const code = pickString(
+        errObj?.code,
+        detailObj?.code,
+        parsed.code,
+        errObj?.type,
+        parsed.type
+      );
+
+      if (message && code) return `[${code}] ${message}`;
+      if (message) return message;
+      if (code) return code;
+    }
+  } catch {
+    /* not JSON, fall through */
+  }
+  return trimmed;
+};
 
 const extractStructuredMessageParts = (value: string): string[] => {
   const trimmed = value.trim();
@@ -685,13 +820,19 @@ const renderMetric = (
   label: string,
   value: string,
   hint?: string,
-  onClick?: () => void
+  onClick?: () => void,
+  options?: { muted?: boolean }
 ) => {
+  const muted = Boolean(options?.muted);
+  const baseClass = muted
+    ? `${styles.batchCheckMetric} ${styles.batchCheckMetricMuted}`
+    : styles.batchCheckMetric;
+
   if (onClick) {
     return (
       <button
         type="button"
-        className={`${styles.batchCheckMetric} ${styles.batchCheckMetricButton}`}
+        className={`${baseClass} ${styles.batchCheckMetricButton}`}
         onClick={onClick}
       >
         <span className={styles.batchCheckMetricLabel}>{label}</span>
@@ -702,7 +843,7 @@ const renderMetric = (
   }
 
   return (
-    <div className={styles.batchCheckMetric}>
+    <div className={baseClass}>
       <span className={styles.batchCheckMetricLabel}>{label}</span>
       <span className={styles.batchCheckMetricValue}>{value}</span>
       {hint ? <span className={styles.batchCheckMetricHint}>{hint}</span> : null}
@@ -744,6 +885,9 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
   const { t } = useTranslation();
   const [detailState, setDetailState] = useState<BatchCheckDetailState | null>(null);
   const [detailPageByGroup, setDetailPageByGroup] = useState<Record<string, number>>({});
+  const [detailSort, setDetailSort] = useState<DetailSortMode>('default');
+  const [detailFilter, setDetailFilter] = useState<string>('');
+  const [healthExpanded, setHealthExpanded] = useState(false);
 
   const aggregate = response?.aggregate ?? null;
   const results = useMemo(
@@ -816,19 +960,37 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
     result: AuthFileBatchCheckResult,
     note?: string
   ): BatchCheckDetailEntry => {
-    const displayErrorMessage = shouldShowResultErrorCard(result)
+    const rawIssueMessage = shouldShowResultErrorCard(result)
       ? resolveResultIssueMessage(result)
       : '';
+    const summarizedIssueMessage = rawIssueMessage ? summarizeErrorMessage(rawIssueMessage) : '';
+    // After JSON summarization the value may become a bare snake_case enum
+    // (e.g. "deactivated_workspace"); push it through formatStatusValue so the
+    // user sees the localized label instead of the raw key.
+    const friendlyIssueMessage = summarizedIssueMessage
+      ? formatStatusValue(summarizedIssueMessage, t)
+      : '';
+    // Only surface the raw payload separately when the friendly form actually
+    // differs (otherwise the two would be identical noise).
+    const errorRaw =
+      rawIssueMessage && friendlyIssueMessage && rawIssueMessage !== friendlyIssueMessage
+        ? rawIssueMessage
+        : undefined;
+    const displayErrorMessage = friendlyIssueMessage || rawIssueMessage;
     const normalizedStatusMessage = normalizeText(result.status_message);
 
     const facts: BatchCheckDetailFact[] = [
       {
         label: t('auth_files.batch_check_detail_classification_label'),
         value: resolveClassificationLabel(result.classification),
+        variant: 'classification',
+        variantKey: String(result.classification ?? ''),
       },
       {
         label: t('auth_files.batch_check_detail_bucket_label'),
         value: resolveBucketLabel(result.bucket),
+        variant: 'bucket',
+        variantKey: String(result.bucket ?? ''),
       },
       {
         label: t('auth_files.batch_check_enabled_state'),
@@ -840,6 +1002,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
       facts.push({
         label: t('auth_files.batch_check_remaining_percent'),
         value: formatPercentValue(result.remaining_percent),
+        variant: 'progress',
+        progressPercent: Math.max(0, Math.min(100, result.remaining_percent)),
       });
     }
 
@@ -851,9 +1015,12 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
     }
 
     if (normalizedStatusMessage && normalizedStatusMessage !== displayErrorMessage) {
+      const statusFriendly = formatStatusValue(normalizedStatusMessage, t);
       facts.push({
         label: t('auth_files.batch_check_status_message'),
-        value: normalizedStatusMessage,
+        value: statusFriendly,
+        tooltip:
+          statusFriendly !== normalizedStatusMessage ? normalizedStatusMessage : undefined,
       });
     }
 
@@ -865,6 +1032,29 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
       });
     }
 
+    // Per-file next refresh time. Reuses the earliest window reset already
+    // computed for refresh-bucket grouping, so the value here matches the
+    // bucket the row was filed under.
+    const refreshMeta = resolveResultRefreshMeta(result);
+    if (refreshMeta.nextRefreshAtMs != null) {
+      facts.push({
+        label: t('auth_files.batch_check_detail_next_refresh_at'),
+        value: formatDateTime(new Date(refreshMeta.nextRefreshAtMs).toISOString()),
+      });
+    } else if (refreshMeta.reasonKey) {
+      facts.push({
+        label: t('auth_files.batch_check_detail_next_refresh_at'),
+        value: t(refreshMeta.reasonKey),
+      });
+    }
+
+    if (result.checked_at) {
+      facts.push({
+        label: t('auth_files.batch_check_detail_checked_at'),
+        value: formatDateTime(result.checked_at),
+      });
+    }
+
     return {
       id: `result:${result.name}`,
       name: result.name,
@@ -872,6 +1062,14 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
       facts,
       note,
       error: displayErrorMessage || undefined,
+      errorRaw,
+      sortKeys: {
+        remainingPercent:
+          typeof result.remaining_percent === 'number' && Number.isFinite(result.remaining_percent)
+            ? result.remaining_percent
+            : undefined,
+        nextRefreshAtMs: refreshMeta.nextRefreshAtMs ?? undefined,
+      },
     };
   };
 
@@ -953,6 +1151,9 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
 
   const openDetailState = (state: BatchCheckDetailState) => {
     setDetailState(state);
+    setDetailPageByGroup({});
+    setDetailSort('default');
+    setDetailFilter('');
     setDetailPageByGroup({});
   };
 
@@ -1074,7 +1275,7 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
       <Modal
         open={open}
         onClose={handleClose}
-        width={980}
+        width="min(1100px, 80vw)"
         className={styles.batchCheckModal}
         title={t('auth_files.batch_check_modal_title')}
         footer={
@@ -1109,6 +1310,63 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
               <strong>{t('auth_files.batch_check_detail_scope_note')}</strong>
               <span>{t('auth_files.batch_check_click_detail_hint')}</span>
             </div>
+
+            <section
+              className={`${styles.batchCheckModalSection} ${styles.batchCheckActionCandidatesSection}`}
+            >
+              <div className={styles.batchCheckSectionTitleWrap}>
+                <div className={styles.batchCheckSectionTitle}>
+                  {t('auth_files.batch_check_action_candidates')}
+                </div>
+                <div className={styles.batchCheckSectionDescription}>
+                  {t('auth_files.batch_check_action_candidates_desc')}
+                </div>
+              </div>
+              <div className={styles.batchCheckDistributionGrid}>
+                {renderDistributionCard(
+                  t('auth_files.batch_check_action_delete_invalidated_401'),
+                  formatNumber(aggregate.action_candidates.invalidated_401_names.length),
+                  t('auth_files.batch_check_action_delete_invalidated_401_hint'),
+                  () =>
+                    openActionDetail(
+                      t('auth_files.batch_check_action_delete_invalidated_401'),
+                      t('auth_files.batch_check_detail_action_desc', {
+                        action: t('auth_files.batch_check_action_delete_invalidated_401'),
+                      }),
+                      aggregate.action_candidates.invalidated_401_names,
+                      t('auth_files.batch_check_detail_scope_note')
+                    )
+                )}
+                {renderDistributionCard(
+                  t('auth_files.batch_check_action_disable_exhausted'),
+                  formatNumber(aggregate.action_candidates.disable_exhausted_names.length),
+                  t('auth_files.batch_check_action_disable_exhausted_hint'),
+                  () =>
+                    openActionDetail(
+                      t('auth_files.batch_check_action_disable_exhausted'),
+                      t('auth_files.batch_check_detail_action_desc', {
+                        action: t('auth_files.batch_check_action_disable_exhausted'),
+                      }),
+                      aggregate.action_candidates.disable_exhausted_names,
+                      t('auth_files.batch_check_detail_disable_exhausted_note')
+                    )
+                )}
+                {renderDistributionCard(
+                  t('auth_files.batch_check_action_reenable_available'),
+                  formatNumber(aggregate.action_candidates.reenable_names.length),
+                  t('auth_files.batch_check_action_reenable_available_hint'),
+                  () =>
+                    openActionDetail(
+                      t('auth_files.batch_check_action_reenable_available'),
+                      t('auth_files.batch_check_detail_action_desc', {
+                        action: t('auth_files.batch_check_action_reenable_available'),
+                      }),
+                      aggregate.action_candidates.reenable_names,
+                      t('auth_files.batch_check_detail_reenable_note')
+                    )
+                )}
+              </div>
+            </section>
 
             <section className={styles.batchCheckModalSection}>
               <div className={styles.batchCheckSectionTitleWrap}>
@@ -1234,7 +1492,7 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                 </div>
               </div>
               <div className={styles.batchCheckHealthGrid}>
-                {HEALTH_BUCKET_META.map((item) => {
+                {(healthExpanded ? HEALTH_BUCKET_META : []).map((item) => {
                   const count = aggregate.health_buckets[item.key] ?? 0;
                   const percent = totalHealthCount > 0 ? (count / totalHealthCount) * 100 : 0;
                   const bucketLabel = resolveBucketLabel(item.key);
@@ -1242,7 +1500,7 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                     <button
                       key={item.key}
                       type="button"
-                      className={`${styles.batchCheckHealthCard} ${styles.batchCheckHealthCardButton}`}
+                      className={`${styles.batchCheckHealthCard} ${styles.batchCheckHealthCardButton}${count === 0 ? ` ${styles.batchCheckHealthCardMuted}` : ''}`}
                       onClick={() =>
                         openResultListDetail(
                           bucketLabel,
@@ -1269,7 +1527,56 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                     </button>
                   );
                 })}
+                {(healthExpanded ? [] : HEALTH_TIER_META).map((tier) => {
+                  const count = tier.bucketKeys.reduce(
+                    (sum, key) => sum + (aggregate.health_buckets[key] ?? 0),
+                    0
+                  );
+                  const percent = totalHealthCount > 0 ? (count / totalHealthCount) * 100 : 0;
+                  const tierLabel = t(`auth_files.batch_check_health_tier_${tier.id}`);
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      className={`${styles.batchCheckHealthCard} ${styles.batchCheckHealthCardButton} ${styles[`batchCheckHealthTier_${tier.id}`] ?? ''}${count === 0 ? ` ${styles.batchCheckHealthCardMuted}` : ''}`}
+                      onClick={() =>
+                        openResultListDetail(
+                          tierLabel,
+                          t('auth_files.batch_check_detail_health_bucket_desc', {
+                            bucket: tierLabel,
+                          }),
+                          results.filter((result) =>
+                            tier.bucketKeys.includes(String(result.bucket))
+                          ),
+                          t('auth_files.batch_check_detail_scope_note')
+                        )
+                      }
+                    >
+                      <div className={styles.batchCheckHealthHeader}>
+                        <span className={styles.batchCheckHealthLabel}>{tierLabel}</span>
+                        <span className={styles.batchCheckHealthRange}>{tier.range}</span>
+                      </div>
+                      <strong className={styles.batchCheckHealthValue}>{formatNumber(count)}</strong>
+                      <div className={styles.batchCheckHealthBarTrack}>
+                        <span
+                          className={styles.batchCheckHealthBarFill}
+                          style={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
+                        />
+                      </div>
+                      <div className={styles.batchCheckHealthHint}>{formatPercentValue(percent)}</div>
+                    </button>
+                  );
+                })}
               </div>
+              <button
+                type="button"
+                className={styles.batchCheckHealthToggle}
+                onClick={() => setHealthExpanded((prev) => !prev)}
+              >
+                {healthExpanded
+                  ? t('auth_files.batch_check_health_collapse')
+                  : t('auth_files.batch_check_health_expand')}
+              </button>
             </section>
 
             <section className={styles.batchCheckModalSection}>
@@ -1292,7 +1599,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                       t('auth_files.batch_check_detail_invalidated_desc'),
                       results.filter((result) => result.classification === 'invalidated_401'),
                       t('auth_files.batch_check_detail_scope_note')
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.invalidated_401_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_no_quota_count'),
@@ -1304,7 +1612,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                       t('auth_files.batch_check_detail_no_quota_desc'),
                       results.filter((result) => result.classification === 'no_quota'),
                       t('auth_files.batch_check_detail_no_quota_note')
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.no_quota_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_api_error_count'),
@@ -1326,7 +1635,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           };
                         },
                       }
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.api_error_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_request_failed_count'),
@@ -1348,7 +1658,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           };
                         },
                       }
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.request_failed_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_exhausted_count'),
@@ -1365,7 +1676,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           result.remaining_percent <= 0
                       ),
                       t('auth_files.batch_check_detail_exhausted_note')
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.exhausted_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_low_remaining_1_29'),
@@ -1382,7 +1694,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           result.remaining_percent <= 29
                       ),
                       t('auth_files.batch_check_detail_scope_note')
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.low_remaining_1_29_count === 0 }
                 )}
                 {renderMetric(
                   t('auth_files.batch_check_low_remaining_1_49'),
@@ -1399,58 +1712,9 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           result.remaining_percent <= 49
                       ),
                       t('auth_files.batch_check_detail_scope_note')
-                    )
+                    ),
+                  { muted: aggregate.risk_overview.mid_low_remaining_1_49_count === 0 }
                 )}
-              </div>
-
-              <div className={styles.batchCheckDetailGroup}>
-                <div className={styles.batchCheckSectionTitle}>
-                  {t('auth_files.batch_check_action_candidates')}
-                </div>
-                <div className={styles.batchCheckDistributionGrid}>
-                  {renderDistributionCard(
-                    t('auth_files.batch_check_action_delete_invalidated_401'),
-                    formatNumber(aggregate.action_candidates.invalidated_401_names.length),
-                    t('auth_files.batch_check_action_delete_invalidated_401_hint'),
-                    () =>
-                      openActionDetail(
-                        t('auth_files.batch_check_action_delete_invalidated_401'),
-                        t('auth_files.batch_check_detail_action_desc', {
-                          action: t('auth_files.batch_check_action_delete_invalidated_401'),
-                        }),
-                        aggregate.action_candidates.invalidated_401_names,
-                        t('auth_files.batch_check_detail_scope_note')
-                      )
-                  )}
-                  {renderDistributionCard(
-                    t('auth_files.batch_check_action_disable_exhausted'),
-                    formatNumber(aggregate.action_candidates.disable_exhausted_names.length),
-                    t('auth_files.batch_check_action_disable_exhausted_hint'),
-                    () =>
-                      openActionDetail(
-                        t('auth_files.batch_check_action_disable_exhausted'),
-                        t('auth_files.batch_check_detail_action_desc', {
-                          action: t('auth_files.batch_check_action_disable_exhausted'),
-                        }),
-                        aggregate.action_candidates.disable_exhausted_names,
-                        t('auth_files.batch_check_detail_disable_exhausted_note')
-                      )
-                  )}
-                  {renderDistributionCard(
-                    t('auth_files.batch_check_action_reenable_available'),
-                    formatNumber(aggregate.action_candidates.reenable_names.length),
-                    t('auth_files.batch_check_action_reenable_available_hint'),
-                    () =>
-                      openActionDetail(
-                        t('auth_files.batch_check_action_reenable_available'),
-                        t('auth_files.batch_check_detail_action_desc', {
-                          action: t('auth_files.batch_check_action_reenable_available'),
-                        }),
-                        aggregate.action_candidates.reenable_names,
-                        t('auth_files.batch_check_detail_reenable_note')
-                      )
-                  )}
-                </div>
               </div>
 
               <div className={styles.batchCheckDetailGroup}>
@@ -1511,7 +1775,9 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                 )}
               </div>
               <div className={styles.batchCheckDistributionGrid}>
-                <div className={styles.batchCheckDistributionCard}>
+                <div
+                  className={`${styles.batchCheckDistributionCard} ${styles.batchCheckDistributionCardRefresh}`}
+                >
                   <div className={styles.batchCheckDistributionTitle}>
                     {t('auth_files.batch_check_refresh_distribution')}
                   </div>
@@ -1536,11 +1802,13 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                   )}
                 </div>
 
-                <div className={styles.batchCheckDistributionCard}>
-                  <div className={styles.batchCheckDistributionTitle}>
-                    {t('auth_files.batch_check_plan_distribution')}
-                  </div>
-                  {planDistribution.length > 0 ? (
+                {planDistribution.length > 0 ? (
+                  <div
+                    className={`${styles.batchCheckDistributionCard} ${styles.batchCheckDistributionCardPlan}`}
+                  >
+                    <div className={styles.batchCheckDistributionTitle}>
+                      {t('auth_files.batch_check_plan_distribution')}
+                    </div>
                     <div className={styles.batchCheckDistributionList}>
                       {planDistribution.map(([label, count]) => (
                         <div key={label} className={styles.batchCheckDistributionRow}>
@@ -1549,18 +1817,16 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className={styles.batchCheckDistributionEmpty}>
-                      {t('auth_files.batch_check_distribution_empty')}
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.batchCheckDistributionCard}>
-                  <div className={styles.batchCheckDistributionTitle}>
-                    {t('auth_files.batch_check_primary_cycle_distribution')}
                   </div>
-                  {primaryCycleDistribution.length > 0 ? (
+                ) : null}
+
+                {primaryCycleDistribution.length > 0 ? (
+                  <div
+                    className={`${styles.batchCheckDistributionCard} ${styles.batchCheckDistributionCardPlan}`}
+                  >
+                    <div className={styles.batchCheckDistributionTitle}>
+                      {t('auth_files.batch_check_primary_cycle_distribution')}
+                    </div>
                     <div className={styles.batchCheckDistributionList}>
                       {primaryCycleDistribution.map(([label, count]) => (
                         <div key={label} className={styles.batchCheckDistributionRow}>
@@ -1569,18 +1835,16 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className={styles.batchCheckDistributionEmpty}>
-                      {t('auth_files.batch_check_distribution_empty')}
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.batchCheckDistributionCard}>
-                  <div className={styles.batchCheckDistributionTitle}>
-                    {t('auth_files.batch_check_secondary_cycle_distribution')}
                   </div>
-                  {secondaryCycleDistribution.length > 0 ? (
+                ) : null}
+
+                {secondaryCycleDistribution.length > 0 ? (
+                  <div
+                    className={`${styles.batchCheckDistributionCard} ${styles.batchCheckDistributionCardPlan}`}
+                  >
+                    <div className={styles.batchCheckDistributionTitle}>
+                      {t('auth_files.batch_check_secondary_cycle_distribution')}
+                    </div>
                     <div className={styles.batchCheckDistributionList}>
                       {secondaryCycleDistribution.map(([label, count]) => (
                         <div key={label} className={styles.batchCheckDistributionRow}>
@@ -1589,12 +1853,8 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className={styles.batchCheckDistributionEmpty}>
-                      {t('auth_files.batch_check_distribution_empty')}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </section>
           </div>
@@ -1606,8 +1866,10 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
         onClose={() => {
           setDetailState(null);
           setDetailPageByGroup({});
+          setDetailSort('default');
+          setDetailFilter('');
         }}
-        width={860}
+        width="min(960px, 75vw)"
         className={styles.batchCheckModal}
         title={detailState?.title}
         footer={
@@ -1634,13 +1896,79 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
               {detailState.note ? <span>{detailState.note}</span> : null}
             </div>
 
+            <div className={styles.batchCheckDetailToolbar}>
+              <input
+                type="search"
+                className={styles.batchCheckDetailToolbarInput}
+                value={detailFilter}
+                onChange={(event) => setDetailFilter(event.target.value)}
+                placeholder={t('auth_files.batch_check_detail_filter_placeholder')}
+                aria-label={t('auth_files.batch_check_detail_filter_placeholder')}
+              />
+              <select
+                className={styles.batchCheckDetailToolbarSelect}
+                value={detailSort}
+                onChange={(event) => setDetailSort(event.target.value as DetailSortMode)}
+                aria-label={t('auth_files.batch_check_detail_sort_label')}
+              >
+                <option value="default">{t('auth_files.batch_check_detail_sort_default')}</option>
+                <option value="remaining_desc">
+                  {t('auth_files.batch_check_detail_sort_remaining_desc')}
+                </option>
+                <option value="remaining_asc">
+                  {t('auth_files.batch_check_detail_sort_remaining_asc')}
+                </option>
+                <option value="next_refresh_asc">
+                  {t('auth_files.batch_check_detail_sort_next_refresh_asc')}
+                </option>
+                <option value="name_asc">{t('auth_files.batch_check_detail_sort_name_asc')}</option>
+              </select>
+            </div>
+
             {detailState.groups.map((group) => (
               (() => {
+                const filterText = detailFilter.trim().toLowerCase();
+                const filteredEntries = filterText
+                  ? group.entries.filter((entry) => {
+                      if (entry.name.toLowerCase().includes(filterText)) return true;
+                      if (entry.subtitle && entry.subtitle.toLowerCase().includes(filterText)) return true;
+                      return false;
+                    })
+                  : group.entries;
+
+                const sortedEntries = [...filteredEntries];
+                const compareNumberDesc = (a?: number, b?: number) => {
+                  // null/undefined values sink to the bottom in any sort mode
+                  const av = a == null ? Number.NEGATIVE_INFINITY : a;
+                  const bv = b == null ? Number.NEGATIVE_INFINITY : b;
+                  return bv - av;
+                };
+                const compareNumberAsc = (a?: number, b?: number) => {
+                  const av = a == null ? Number.POSITIVE_INFINITY : a;
+                  const bv = b == null ? Number.POSITIVE_INFINITY : b;
+                  return av - bv;
+                };
+                if (detailSort === 'remaining_desc') {
+                  sortedEntries.sort((a, b) =>
+                    compareNumberDesc(a.sortKeys?.remainingPercent, b.sortKeys?.remainingPercent)
+                  );
+                } else if (detailSort === 'remaining_asc') {
+                  sortedEntries.sort((a, b) =>
+                    compareNumberAsc(a.sortKeys?.remainingPercent, b.sortKeys?.remainingPercent)
+                  );
+                } else if (detailSort === 'next_refresh_asc') {
+                  sortedEntries.sort((a, b) =>
+                    compareNumberAsc(a.sortKeys?.nextRefreshAtMs, b.sortKeys?.nextRefreshAtMs)
+                  );
+                } else if (detailSort === 'name_asc') {
+                  sortedEntries.sort((a, b) => a.name.localeCompare(b.name));
+                }
+
                 const currentPage = detailPageByGroup[group.id] ?? 1;
-                const totalPages = Math.max(1, Math.ceil(group.entries.length / DETAIL_PAGE_SIZE));
+                const totalPages = Math.max(1, Math.ceil(sortedEntries.length / DETAIL_PAGE_SIZE));
                 const safePage = Math.min(Math.max(1, currentPage), totalPages);
                 const startIndex = (safePage - 1) * DETAIL_PAGE_SIZE;
-                const visibleEntries = group.entries.slice(startIndex, startIndex + DETAIL_PAGE_SIZE);
+                const visibleEntries = sortedEntries.slice(startIndex, startIndex + DETAIL_PAGE_SIZE);
 
                 return (
                   <section key={group.id} className={styles.batchCheckDetailModalGroup}>
@@ -1652,7 +1980,12 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                         ) : null}
                       </div>
                       <div className={styles.batchCheckDetailModalCount}>
-                        {t('auth_files.batch_check_detail_hits', { count: group.entries.length })}
+                        {filterText && filteredEntries.length !== group.entries.length
+                          ? t('auth_files.batch_check_detail_hits_filtered', {
+                              filtered: filteredEntries.length,
+                              total: group.entries.length,
+                            })
+                          : t('auth_files.batch_check_detail_hits', { count: group.entries.length })}
                       </div>
                     </div>
 
@@ -1661,7 +1994,12 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                         <article key={entry.id} className={styles.batchCheckDetailEntry}>
                           <div className={styles.batchCheckDetailEntryHeader}>
                             <div className={styles.batchCheckDetailEntryTitleWrap}>
-                              <div className={styles.batchCheckDetailEntryName}>{entry.name}</div>
+                              <div
+                                className={styles.batchCheckDetailEntryName}
+                                title={entry.name}
+                              >
+                                {entry.name}
+                              </div>
                               {entry.subtitle ? (
                                 <div className={styles.batchCheckDetailEntrySubtitle}>{entry.subtitle}</div>
                               ) : null}
@@ -1670,12 +2008,64 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
 
                           {entry.facts.length > 0 ? (
                             <div className={styles.batchCheckDetailFacts}>
-                              {entry.facts.map((fact) => (
-                                <div key={`${entry.id}:${fact.label}`} className={styles.batchCheckDetailFact}>
-                                  <span className={styles.batchCheckMetricLabel}>{fact.label}</span>
-                                  <strong className={styles.batchCheckMetricValue}>{fact.value}</strong>
-                                </div>
-                              ))}
+                              {entry.facts.map((fact) => {
+                                if (fact.variant === 'progress') {
+                                  const pct = Math.max(
+                                    0,
+                                    Math.min(100, fact.progressPercent ?? 0)
+                                  );
+                                  // Color tier mirrors the bucket palette so the
+                                  // progress bar matches the bucket badge above.
+                                  const tier =
+                                    pct >= 50 ? 'healthy' : pct >= 10 ? 'warning' : 'critical';
+                                  return (
+                                    <div
+                                      key={`${entry.id}:${fact.label}`}
+                                      className={styles.batchCheckDetailFact}
+                                    >
+                                      <span className={styles.batchCheckMetricLabel}>{fact.label}</span>
+                                      <div className={styles.batchCheckDetailFactProgressRow}>
+                                        <div
+                                          className={`${styles.batchCheckDetailFactProgressTrack} ${styles[`batchCheckDetailFactProgressTrack_${tier}`] ?? ''}`}
+                                        >
+                                          <span
+                                            className={`${styles.batchCheckDetailFactProgressFill} ${styles[`batchCheckDetailFactProgressFill_${tier}`] ?? ''}`}
+                                            style={{ width: `${pct}%` }}
+                                          />
+                                        </div>
+                                        <strong className={styles.batchCheckDetailFactProgressValue}>
+                                          {fact.value}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                const valueClass = (() => {
+                                  if (fact.variant === 'classification') {
+                                    const key = (fact.variantKey || '').toLowerCase();
+                                    return `${styles.batchCheckBadge} ${styles[`batchCheckBadgeClassification_${key}`] ?? styles.batchCheckBadgeNeutral}`;
+                                  }
+                                  if (fact.variant === 'bucket') {
+                                    const key = (fact.variantKey || '').toLowerCase();
+                                    return `${styles.batchCheckBadgeOutline} ${styles[`batchCheckBadgeBucket_${key}`] ?? ''}`;
+                                  }
+                                  return styles.batchCheckMetricValue;
+                                })();
+                                return (
+                                  <div key={`${entry.id}:${fact.label}`} className={styles.batchCheckDetailFact}>
+                                    <span className={styles.batchCheckMetricLabel}>{fact.label}</span>
+                                    {fact.variant ? (
+                                      <span className={valueClass} title={fact.tooltip}>
+                                        {fact.value}
+                                      </span>
+                                    ) : (
+                                      <strong className={valueClass} title={fact.tooltip}>
+                                        {fact.value}
+                                      </strong>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : null}
 
@@ -1689,7 +2079,17 @@ export function AuthFilesBatchCheckModal(props: AuthFilesBatchCheckModalProps) {
                           {entry.error ? (
                             <div className={styles.batchCheckDetailEntryError}>
                               <strong>{t('auth_files.batch_check_detail_error_label')}：</strong>
-                              <span>{entry.error}</span>
+                              <span title={entry.errorRaw}>{entry.error}</span>
+                              {entry.errorRaw ? (
+                                <details className={styles.batchCheckDetailEntryErrorRaw}>
+                                  <summary>
+                                    {t('auth_files.batch_check_detail_error_raw_toggle')}
+                                  </summary>
+                                  <pre className={styles.batchCheckDetailEntryErrorRawPre}>
+                                    {entry.errorRaw}
+                                  </pre>
+                                </details>
+                              ) : null}
                             </div>
                           ) : null}
                         </article>
