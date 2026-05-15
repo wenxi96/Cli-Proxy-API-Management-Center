@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { Select } from '@/components/ui/Select';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   IconCheck,
   IconChevronDown,
@@ -28,9 +29,13 @@ import { ProviderStatusBar } from '../ProviderStatusBar';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import {
   collectOpenAIProviderUsageDetails,
+  getOpenAIProviderRecentStatusData,
+  getOpenAIProviderRecentWindowStats,
   getOpenAIProviderKey,
   getOpenAIProviderStats,
   getStatsForIdentity,
+  hasOpenAIProviderRecentUsage,
+  type ProviderRecentUsageMap,
 } from '../utils';
 
 type SortOption = 'name' | 'priority' | 'recent-success';
@@ -48,6 +53,7 @@ const EMPTY_STATUS_BAR = calculateStatusBarData([]);
 interface OpenAISectionProps {
   configs: OpenAIProviderConfig[];
   keyStats: KeyStats;
+  usageByProvider: ProviderRecentUsageMap;
   usageDetailsBySource: UsageDetailsBySource;
   usageDetailsByAuthIndex: UsageDetailsByAuthIndex;
   loading: boolean;
@@ -59,6 +65,7 @@ interface OpenAISectionProps {
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
+  onToggle: (index: number, enabled: boolean) => void;
 }
 
 interface IndexedOpenAIProvider {
@@ -77,6 +84,7 @@ const getApiKeyEntryRenderKey = (
 export function OpenAISection({
   configs,
   keyStats,
+  usageByProvider,
   usageDetailsBySource,
   usageDetailsByAuthIndex,
   loading,
@@ -88,11 +96,13 @@ export function OpenAISection({
   onAdd,
   onEdit,
   onDelete,
+  onToggle,
 }: OpenAISectionProps) {
   const { t } = useTranslation();
   const pageTransitionLayer = usePageTransitionLayer();
   const isTransitionAnimating = pageTransitionLayer?.isAnimating ?? false;
   const actionsDisabled = disableControls || loading || isSwitching;
+  const toggleDisabled = disableControls || loading || isSwitching;
   const [sortOption, setSortOption] = useState<SortOption>('priority');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
@@ -261,6 +271,10 @@ export function OpenAISection({
 
     configs.forEach((provider, index) => {
       const providerKey = getOpenAIProviderKey(provider, index);
+      if (hasOpenAIProviderRecentUsage(provider, usageByProvider)) {
+        cache.set(providerKey, getOpenAIProviderRecentStatusData(provider, usageByProvider));
+        return;
+      }
       cache.set(
         providerKey,
         calculateStatusBarData(
@@ -270,7 +284,7 @@ export function OpenAISection({
     });
 
     return cache;
-  }, [configs, usageDetailsByAuthIndex, usageDetailsBySource]);
+  }, [configs, usageByProvider, usageDetailsByAuthIndex, usageDetailsBySource]);
 
   const sortOptions = useMemo(
     () => [
@@ -294,6 +308,17 @@ export function OpenAISection({
       sortOption === 'recent-success'
         ? new Map(sorted.map(({ config }) => [config, getOpenAIProviderStats(config, keyStats)]))
         : null;
+    const providerRecentStats =
+      sortOption === 'recent-success'
+        ? new Map(
+            sorted.map(({ config }) => [
+              config,
+              hasOpenAIProviderRecentUsage(config, usageByProvider)
+                ? getOpenAIProviderRecentWindowStats(config, usageByProvider)
+                : getOpenAIProviderStats(config, keyStats),
+            ])
+          )
+        : null;
 
     switch (sortOption) {
       case 'name':
@@ -315,8 +340,8 @@ export function OpenAISection({
       case 'recent-success':
         sorted.sort((a, b) => {
           const successDiff =
-            (providerStats?.get(a.config)?.success ?? 0) -
-            (providerStats?.get(b.config)?.success ?? 0);
+            (providerRecentStats?.get(a.config)?.success ?? providerStats?.get(a.config)?.success ?? 0) -
+            (providerRecentStats?.get(b.config)?.success ?? providerStats?.get(b.config)?.success ?? 0);
 
           if (successDiff !== 0) {
             return direction * successDiff;
@@ -330,7 +355,7 @@ export function OpenAISection({
     }
 
     return sorted;
-  }, [configs, sortOption, sortDirection, keyStats, selectedModels]);
+  }, [configs, sortOption, sortDirection, keyStats, selectedModels, usageByProvider]);
 
   const toggleModelSelection = (modelName: string) => {
     setSelectedModels((prev) => {
@@ -537,6 +562,7 @@ export function OpenAISection({
     const apiKeyEntries = provider.apiKeyEntries || [];
     const statusData =
       statusBarCache.get(getOpenAIProviderKey(provider, originalIndex)) || EMPTY_STATUS_BAR;
+    const providerDisabled = provider.disabled === true;
 
     return (
       <div
@@ -562,6 +588,11 @@ export function OpenAISection({
             <span className={styles.fieldLabel}>{t('common.base_url')}:</span>
             <span className={styles.fieldValue}>{provider.baseUrl}</span>
           </div>
+          {providerDisabled && (
+            <div className="status-badge warning" style={{ marginTop: 8, marginBottom: 0 }}>
+              {t('ai_providers.config_disabled_badge')}
+            </div>
+          )}
           {headerEntries.length > 0 && (
             <div className={styles.headerBadgeList}>
               {headerEntries.map(([key, value]) => (
@@ -659,6 +690,12 @@ export function OpenAISection({
           >
             {t('common.delete')}
           </Button>
+          <ToggleSwitch
+            label={t('ai_providers.config_toggle_label')}
+            checked={!providerDisabled}
+            disabled={toggleDisabled}
+            onChange={(value) => void onToggle(originalIndex, value)}
+          />
         </div>
       </div>
     );

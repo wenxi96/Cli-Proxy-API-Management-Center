@@ -11,6 +11,7 @@ import type {
 } from '@/types';
 import { maskApiKey } from '@/utils/format';
 import { calculateStatusBarData, type KeyStats } from '@/utils/usage';
+import { statusBarDataFromRecentRequests } from '@/utils/recentRequests';
 import { type UsageDetailsByAuthIndex, type UsageDetailsBySource } from '@/utils/usageIndex';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
@@ -19,15 +20,19 @@ import { ProviderStatusBar } from '../ProviderStatusBar';
 import {
   collectUsageDetailsForIdentity,
   getProviderConfigKey,
+  getProviderRecentBuckets,
   getStatsForIdentity,
+  hasProviderRecentUsage,
   hasDisableAllModelsRule,
   shouldSplitScopedPoolSummary,
   summarizeScopedPoolVisibleItems,
+  type ProviderRecentUsageMap,
 } from '../utils';
 
 interface GeminiSectionProps {
   configs: GeminiKeyConfig[];
   keyStats: KeyStats;
+  usageByProvider: ProviderRecentUsageMap;
   usageDetailsBySource: UsageDetailsBySource;
   usageDetailsByAuthIndex: UsageDetailsByAuthIndex;
   loading: boolean;
@@ -44,6 +49,7 @@ interface GeminiSectionProps {
 export function GeminiSection({
   configs,
   keyStats,
+  usageByProvider,
   usageDetailsBySource,
   usageDetailsByAuthIndex,
   loading,
@@ -66,6 +72,15 @@ export function GeminiSection({
     configs.forEach((config, index) => {
       if (!config.apiKey) return;
       const configKey = getProviderConfigKey(config, index);
+      if (hasProviderRecentUsage(usageByProvider, 'gemini', config.apiKey, config.baseUrl)) {
+        cache.set(
+          configKey,
+          statusBarDataFromRecentRequests(
+            getProviderRecentBuckets(usageByProvider, 'gemini', config.apiKey, config.baseUrl)
+          )
+        );
+        return;
+      }
       cache.set(
         configKey,
         calculateStatusBarData(
@@ -79,7 +94,7 @@ export function GeminiSection({
     });
 
     return cache;
-  }, [configs, usageDetailsByAuthIndex, usageDetailsBySource]);
+  }, [configs, usageByProvider, usageDetailsByAuthIndex, usageDetailsBySource]);
 
   const visibleScopedPoolSummary = useMemo(
     () =>

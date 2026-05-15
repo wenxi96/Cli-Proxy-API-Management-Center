@@ -9,6 +9,7 @@ import {
   OpenAISection,
   VertexSection,
   ProviderNav,
+  useProviderRecentRequests,
   useProviderStats,
 } from '@/components/providers';
 import {
@@ -76,6 +77,9 @@ export function AiProvidersPage() {
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
 
   const { keyStats, usageDetails, loadKeyStats, refreshKeyStats } = useProviderStats({
+    enabled: isCurrentLayer,
+  });
+  const { usageByProvider, loadRecentRequests, refreshRecentRequests } = useProviderRecentRequests({
     enabled: isCurrentLayer,
   });
   const usageDetailsBySource = useMemo(
@@ -158,8 +162,8 @@ export function AiProvidersPage() {
 
   useEffect(() => {
     if (!isCurrentLayer) return;
-    void loadKeyStats().catch(() => {});
-  }, [isCurrentLayer, loadKeyStats]);
+    void Promise.all([loadKeyStats(), loadRecentRequests()]).catch(() => {});
+  }, [isCurrentLayer, loadKeyStats, loadRecentRequests]);
 
   useEffect(() => {
     if (config?.geminiApiKeys) setGeminiKeys(config.geminiApiKeys);
@@ -200,8 +204,8 @@ export function AiProvidersPage() {
   }, [claudeConfigs, codexConfigs, geminiKeys, openaiProviders, scopedPoolStatus, vertexConfigs]);
 
   const handleHeaderRefresh = useCallback(async () => {
-    await Promise.all([refreshKeyStats(), loadConfigs()]);
-  }, [loadConfigs, refreshKeyStats]);
+    await Promise.all([refreshKeyStats(), refreshRecentRequests(), loadConfigs()]);
+  }, [loadConfigs, refreshKeyStats, refreshRecentRequests]);
 
   useHeaderRefresh(handleHeaderRefresh, isCurrentLayer);
 
@@ -343,6 +347,38 @@ export function AiProvidersPage() {
     }
   };
 
+  const setOpenAIProviderEnabled = async (index: number, enabled: boolean) => {
+    const current = openaiProviders[index];
+    if (!current) return;
+
+    const switchingKey = `openai:${current.name}:${index}`;
+    setConfigSwitchingKey(switchingKey);
+
+    const previousList = openaiProviders;
+    const nextItem: OpenAIProviderConfig = { ...current, disabled: !enabled };
+    const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
+
+    setOpenaiProviders(nextList);
+    updateConfigValue('openai-compatibility', nextList);
+    clearCache('openai-compatibility');
+
+    try {
+      await providersApi.updateOpenAIProviderDisabled(index, !enabled);
+      showNotification(
+        enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
+        'success'
+      );
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      setOpenaiProviders(previousList);
+      updateConfigValue('openai-compatibility', previousList);
+      clearCache('openai-compatibility');
+      showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
+    } finally {
+      setConfigSwitchingKey(null);
+    }
+  };
+
   const deleteProviderEntry = async (type: 'codex' | 'claude', index: number) => {
     const source = type === 'codex' ? codexConfigs : claudeConfigs;
     const entry = source[index];
@@ -435,6 +471,7 @@ export function AiProvidersPage() {
           <GeminiSection
             configs={geminiKeys}
             keyStats={keyStats}
+            usageByProvider={usageByProvider}
             usageDetailsBySource={usageDetailsBySource}
             usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
@@ -453,6 +490,7 @@ export function AiProvidersPage() {
         <CodexSection
           configs={codexConfigs}
             keyStats={keyStats}
+            usageByProvider={usageByProvider}
             usageDetailsBySource={usageDetailsBySource}
             usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
@@ -471,6 +509,7 @@ export function AiProvidersPage() {
         <ClaudeSection
           configs={claudeConfigs}
             keyStats={keyStats}
+            usageByProvider={usageByProvider}
             usageDetailsBySource={usageDetailsBySource}
             usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
@@ -489,6 +528,7 @@ export function AiProvidersPage() {
         <VertexSection
           configs={vertexConfigs}
             keyStats={keyStats}
+            usageByProvider={usageByProvider}
             usageDetailsBySource={usageDetailsBySource}
             usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
@@ -517,6 +557,7 @@ export function AiProvidersPage() {
         <OpenAISection
           configs={openaiProviders}
             keyStats={keyStats}
+            usageByProvider={usageByProvider}
             usageDetailsBySource={usageDetailsBySource}
             usageDetailsByAuthIndex={usageDetailsByAuthIndex}
             loading={loading}
@@ -528,6 +569,7 @@ export function AiProvidersPage() {
           onAdd={() => openEditor('/ai-providers/openai/new')}
             onEdit={(index) => openEditor(`/ai-providers/openai/${index}`)}
             onDelete={deleteOpenai}
+            onToggle={(index, enabled) => void setOpenAIProviderEnabled(index, enabled)}
           />
         </div>
       </div>

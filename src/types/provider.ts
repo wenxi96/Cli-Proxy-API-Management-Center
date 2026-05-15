@@ -63,6 +63,7 @@ export interface OpenAIProviderConfig {
   priority?: number;
   testModel?: string;
   authIndex?: string;
+  disabled?: boolean;
   [key: string]: unknown;
 }
 
