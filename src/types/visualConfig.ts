@@ -18,6 +18,7 @@ export type VisualConfigFieldPath =
   | 'requestRetry'
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
+  | 'quotaAutoDisableAuthFileQuotaThresholdPercent'
   | 'routingScopedPoolDefaultsLimit'
   | 'routingScopedPoolDefaultsQuotaThresholdPercent'
   | 'routingScopedPoolDefaultsConsecutiveErrorThreshold'
@@ -33,6 +34,7 @@ export type VisualConfigFieldPath =
 export type VisualConfigValidationErrorCode =
   | 'port_range'
   | 'non_negative_integer'
+  | 'quota_threshold_percent_range'
   | 'duplicate_provider_key';
 
 export type VisualConfigValidationErrors = Partial<
@@ -107,6 +109,7 @@ export type VisualConfigValues = {
   quotaSwitchProject: boolean;
   quotaSwitchPreviewModel: boolean;
   quotaAutoDisableAuthFileOnZeroQuota: boolean;
+  quotaAutoDisableAuthFileQuotaThresholdPercent: string;
   quotaAntigravityCredits: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
   routingScopedPoolEnabled: boolean;
@@ -158,6 +161,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
   quotaAutoDisableAuthFileOnZeroQuota: false,
+  quotaAutoDisableAuthFileQuotaThresholdPercent: '0',
   quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',
   routingScopedPoolEnabled: false,

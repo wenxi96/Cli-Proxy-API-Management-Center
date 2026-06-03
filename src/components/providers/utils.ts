@@ -9,6 +9,7 @@ import type {
 } from '@/types';
 import {
   buildCandidateUsageSourceIds,
+  calculateStatusBarData,
   normalizeAuthIndex,
   type KeyStatBucket,
   type KeyStats,
@@ -369,10 +370,43 @@ export function collectOpenAIProviderRecentBuckets(
   return mergeRecentRequestBucketGroups(groups);
 }
 
+export function getOpenAIProviderRecentWindowStats(
+  provider: OpenAIProviderConfig,
+  usageByProvider: ProviderRecentUsageMap,
+  usageDetailsBySource?: UsageDetailsBySource,
+  usageDetailsByAuthIndex?: UsageDetailsByAuthIndex
+): { success: number; failure: number } {
+  if (usageDetailsBySource && usageDetailsByAuthIndex) {
+    const details = collectOpenAIProviderUsageDetails(
+      provider,
+      usageDetailsBySource,
+      usageDetailsByAuthIndex
+    );
+    if (details.length > 0) {
+      const status = calculateStatusBarData(details);
+      return { success: status.totalSuccess, failure: status.totalFailure };
+    }
+  }
+
+  return sumRecentRequests(collectOpenAIProviderRecentBuckets(provider, usageByProvider));
+}
+
+export const hasKeyStatsData = (keyStats?: KeyStats): keyStats is KeyStats =>
+  Boolean(
+    keyStats &&
+      (Object.keys(keyStats.bySource ?? {}).length > 0 ||
+        Object.keys(keyStats.byAuthIndex ?? {}).length > 0)
+  );
+
 export function getOpenAIProviderTotalStats(
   provider: OpenAIProviderConfig,
-  usageByProvider: ProviderRecentUsageMap
+  usageByProvider: ProviderRecentUsageMap,
+  keyStats?: KeyStats
 ): { success: number; failure: number } {
+  if (hasKeyStatsData(keyStats)) {
+    return getOpenAIProviderStats(provider, keyStats);
+  }
+
   return (provider.apiKeyEntries || []).reduce(
     (total, entry) => {
       const usageEntry = getProviderRecentUsageEntry(
@@ -381,7 +415,6 @@ export function getOpenAIProviderTotalStats(
         entry.apiKey,
         provider.baseUrl
       );
-
       return {
         success: total.success + usageEntry.success,
         failure: total.failure + usageEntry.failed,
@@ -391,17 +424,23 @@ export function getOpenAIProviderTotalStats(
   );
 }
 
-export function getOpenAIProviderRecentWindowStats(
-  provider: OpenAIProviderConfig,
-  usageByProvider: ProviderRecentUsageMap
-): { success: number; failure: number } {
-  return sumRecentRequests(collectOpenAIProviderRecentBuckets(provider, usageByProvider));
-}
-
 export function getOpenAIProviderRecentStatusData(
   provider: OpenAIProviderConfig,
-  usageByProvider: ProviderRecentUsageMap
+  usageByProvider: ProviderRecentUsageMap,
+  usageDetailsBySource?: UsageDetailsBySource,
+  usageDetailsByAuthIndex?: UsageDetailsByAuthIndex
 ): StatusBarData {
+  if (usageDetailsBySource && usageDetailsByAuthIndex) {
+    const details = collectOpenAIProviderUsageDetails(
+      provider,
+      usageDetailsBySource,
+      usageDetailsByAuthIndex
+    );
+    if (details.length > 0) {
+      return calculateStatusBarData(details);
+    }
+  }
+
   return statusBarDataFromRecentRequests(
     collectOpenAIProviderRecentBuckets(provider, usageByProvider)
   );

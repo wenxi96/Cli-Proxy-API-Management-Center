@@ -10,6 +10,7 @@ export interface QuotaExceededConfig {
   switchProject?: boolean;
   switchPreviewModel?: boolean;
   autoDisableAuthFileOnZeroQuota?: boolean;
+  autoDisableAuthFileQuotaThresholdPercent?: number;
   antigravityCredits?: boolean;
 }
 

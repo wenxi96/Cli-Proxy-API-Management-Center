@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { ScopedPoolAuthRuntimeStatus } from '@/types';
 import { getScopedPoolReasonKey, getScopedPoolStateKey } from '@/utils/scopedPool';
-import styles from '@/pages/AiProvidersPage.module.scss';
+import styles from './ScopedPoolAuthBadge.module.scss';
 
 interface ScopedPoolAuthBadgeProps {
   status?: ScopedPoolAuthRuntimeStatus | null;

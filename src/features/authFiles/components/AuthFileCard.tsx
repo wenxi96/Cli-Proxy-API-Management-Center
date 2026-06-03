@@ -23,6 +23,7 @@ import {
   getTypeColor,
   getTypeLabel,
   isRuntimeOnlyAuthFile,
+  normalizeProviderKey,
   parsePriorityValue,
   resolveAuthFileStats,
   type QuotaProviderType,
@@ -117,11 +118,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   const fileStats = resolveAuthFileStats(file, keyStats);
   const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
-  const isAistudio = (file.type || '').toLowerCase() === 'aistudio';
+  const providerKey = normalizeProviderKey(String(file.type ?? file.provider ?? 'unknown'));
+  const isAistudio = providerKey === 'aistudio';
   const showModelsButton = !isRuntimeOnly || isAistudio;
-  const typeColor = getTypeColor(file.type || 'unknown', resolvedTheme);
-  const typeLabel = getTypeLabel(t, file.type || 'unknown');
-  const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
+  const typeColor = getTypeColor(providerKey, resolvedTheme);
+  const typeLabel = getTypeLabel(t, providerKey);
+  const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
 
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
@@ -139,13 +141,23 @@ export function AuthFileCard(props: AuthFileCardProps) {
             ? styles.geminiCliCard
             : quotaType === 'kimi'
               ? styles.kimiCard
-              : '';
+              : quotaType === 'xai'
+                ? styles.xaiCard
+                : '';
 
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndexKey = normalizeAuthIndex(rawAuthIndex);
   const statusData =
     (authIndexKey && statusBarCache.get(authIndexKey)) || calculateStatusBarData([]);
   const rawStatusMessage = getAuthFileStatusMessage(file);
+  const statusMessageKey = rawStatusMessage
+    ? `auth_files.batch_check_status_value.${rawStatusMessage}`
+    : '';
+  const translatedStatusMessage = statusMessageKey ? t(statusMessageKey) : '';
+  const statusMessageLabel =
+    translatedStatusMessage && translatedStatusMessage !== statusMessageKey
+      ? translatedStatusMessage
+      : rawStatusMessage;
   const hasStatusWarning =
     Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
 
@@ -325,7 +337,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
           {rawStatusMessage && hasStatusWarning && (
             <div className={styles.healthStatusMessage} title={rawStatusMessage}>
               <IconInfo className={styles.messageIcon} size={14} />
-              <span>{rawStatusMessage}</span>
+              <span>{statusMessageLabel}</span>
             </div>
           )}
 

@@ -60,6 +60,24 @@ export const configApi = {
     apiClient.put('/quota-exceeded/auto-disable-auth-file-on-zero-quota', { value: enabled }),
 
   /**
+   * 配额回退：低额度自动禁用阈值
+   */
+  async getAutoDisableAuthFileQuotaThresholdPercent(): Promise<number> {
+    const data = await apiClient.get<Record<string, unknown>>(
+      '/quota-exceeded/auto-disable-auth-file-quota-threshold-percent'
+    );
+    const value =
+      data?.['auto-disable-auth-file-quota-threshold-percent'] ??
+      data?.autoDisableAuthFileQuotaThresholdPercent ??
+      0;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  },
+
+  updateAutoDisableAuthFileQuotaThresholdPercent: (value: number) =>
+    apiClient.put('/quota-exceeded/auto-disable-auth-file-quota-threshold-percent', { value }),
+
+  /**
    * 使用统计开关
    */
   updateUsageStatistics: (enabled: boolean) =>

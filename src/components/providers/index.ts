@@ -1,13 +1,5 @@
-export { AmpcodeSection } from './AmpcodeSection';
-export { ClaudeSection } from './ClaudeSection';
-export { CodexSection } from './CodexSection';
-export { GeminiSection } from './GeminiSection';
-export { OpenAISection } from './OpenAISection';
 export { ScopedPoolAuthBadge } from './ScopedPoolAuthBadge';
-export { VertexSection } from './VertexSection';
-export { ProviderList } from './ProviderList';
 export { ProviderStatusBar } from './ProviderStatusBar';
-export { ProviderNav } from './ProviderNav';
 export * from './hooks/useProviderRecentRequests';
 export * from './hooks/useProviderStats';
 export * from './types';

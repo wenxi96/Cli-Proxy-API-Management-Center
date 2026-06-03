@@ -119,13 +119,13 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
   const apiKey =
     record?.['api-key'] ?? record?.apiKey ?? record?.key ?? (typeof entry === 'string' ? entry : '');
   const trimmed = String(apiKey || '').trim();
-  if (!trimmed) return null;
 
   const proxyUrl = record ? record['proxy-url'] ?? record.proxyUrl : undefined;
   const headers = record ? normalizeHeaders(record.headers) : undefined;
   const authIndex = normalizeAuthIndex(
     record?.['auth-index'] ?? record?.authIndex ?? record?.['auth_index']
   );
+  if (!trimmed && !authIndex) return null;
 
   const result: ApiKeyEntry = {
     apiKey: trimmed,
@@ -281,6 +281,8 @@ const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null
   if (models.length) result.models = models;
   if (priority !== undefined) result.priority = Number(priority);
   if (testModel) result.testModel = String(testModel);
+  const disabled = normalizeBoolean(provider.disabled ?? provider['disabled']);
+  if (disabled !== undefined) result.disabled = disabled;
   const authIndex = normalizeAuthIndex(
     provider['auth-index'] ?? provider.authIndex ?? provider['auth_index']
   );
@@ -497,6 +499,10 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
       ),
       autoDisableAuthFileOnZeroQuota: normalizeBoolean(
         quota['auto-disable-auth-file-on-zero-quota'] ?? quota.autoDisableAuthFileOnZeroQuota
+      ),
+      autoDisableAuthFileQuotaThresholdPercent: normalizeNumericField(
+        quota['auto-disable-auth-file-quota-threshold-percent'] ??
+          quota.autoDisableAuthFileQuotaThresholdPercent
       ),
       antigravityCredits: normalizeBoolean(
         quota['antigravity-credits'] ?? quota.antigravityCredits

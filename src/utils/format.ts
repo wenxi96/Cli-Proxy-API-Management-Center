@@ -5,14 +5,6 @@ import { parseTimestamp } from './timestamp';
  * 从原项目 src/utils/string.js 迁移
  */
 
-const resolveDefaultLocale = (): string | undefined => {
-  const fromDocument =
-    typeof document !== 'undefined' ? document.documentElement?.lang?.trim() : '';
-  if (fromDocument) return fromDocument;
-  const fromNavigator = typeof navigator !== 'undefined' ? navigator.language?.trim() : '';
-  return fromNavigator || undefined;
-};
-
 /**
  * 隐藏 API Key 中间部分，仅保留前后两位
  */
@@ -43,27 +35,6 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${units[i]}`;
-}
-
-/**
- * 格式化日期时间
- */
-export function formatDateTime(date: string | Date, locale?: string): string {
-  const d = typeof date === 'string' ? parseTimestamp(date) ?? new Date(date) : date;
-
-  if (isNaN(d.getTime())) {
-    return 'Invalid Date';
-  }
-
-  const resolvedLocale = locale?.trim() || resolveDefaultLocale();
-  return d.toLocaleString(resolvedLocale, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
 }
 
 /**
@@ -98,19 +69,25 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
 }
 
 /**
- * 格式化数字（添加千位分隔符）
+ * 格式化日期时间
  */
-export function formatNumber(num: number, locale?: string): string {
-  const resolvedLocale = locale?.trim() || resolveDefaultLocale();
-  return num.toLocaleString(resolvedLocale);
+export function formatDateTime(date: string | Date, locale?: string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return '';
+  return locale ? d.toLocaleString(locale) : d.toLocaleString();
 }
 
 /**
- * 截断长文本
+ * 格式化数字
+ */
+export function formatNumber(num: number, locale?: string): string {
+  return locale ? num.toLocaleString(locale) : num.toLocaleString();
+}
+
+/**
+ * 截断文本
  */
 export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
+  if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...';
 }

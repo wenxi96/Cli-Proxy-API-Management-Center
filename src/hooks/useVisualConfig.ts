@@ -145,6 +145,14 @@ function getNonNegativeIntegerError(value: string): 'non_negative_integer' | und
   return Number(trimmed) >= 0 ? undefined : 'non_negative_integer';
 }
 
+function getQuotaThresholdPercentError(value: string): 'quota_threshold_percent_range' | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^\d+$/.test(trimmed)) return 'quota_threshold_percent_range';
+  const parsed = Number(trimmed);
+  return parsed >= 0 && parsed <= 50 ? undefined : 'quota_threshold_percent_range';
+}
+
 function getScopedPoolProviderDuplicateError(
   entries: VisualScopedPoolProviderEntry[]
 ): 'duplicate_provider_key' | undefined {
@@ -171,33 +179,39 @@ function getPortError(value: string): 'port_range' | undefined {
 export function getVisualConfigValidationErrors(
   values: VisualConfigValues
 ): VisualConfigValidationErrors {
+  const shouldValidateScopedPool =
+    values.routingStrategy === 'round-robin' && values.routingScopedPoolEnabled;
+
   return {
     port: getPortError(values.port),
     logsMaxTotalSizeMb: getNonNegativeIntegerError(values.logsMaxTotalSizeMb),
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
-    routingScopedPoolDefaultsLimit: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsLimit
-    ),
-    routingScopedPoolDefaultsQuotaThresholdPercent: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsQuotaThresholdPercent
-    ),
-    routingScopedPoolDefaultsConsecutiveErrorThreshold: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsConsecutiveErrorThreshold
-    ),
-    routingScopedPoolDefaultsPenaltyWindowSeconds: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsPenaltyWindowSeconds
-    ),
-    routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds
-    ),
-    routingScopedPoolDefaultsIdleLogThrottleSeconds: getNonNegativeIntegerError(
-      values.routingScopedPoolDefaultsIdleLogThrottleSeconds
-    ),
-    routingScopedPoolProviders: getScopedPoolProviderDuplicateError(
-      values.routingScopedPoolProviders
-    ),
+    quotaAutoDisableAuthFileQuotaThresholdPercent: values.quotaAutoDisableAuthFileOnZeroQuota
+      ? getQuotaThresholdPercentError(values.quotaAutoDisableAuthFileQuotaThresholdPercent)
+      : undefined,
+    routingScopedPoolDefaultsLimit: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsLimit)
+      : undefined,
+    routingScopedPoolDefaultsQuotaThresholdPercent: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsQuotaThresholdPercent)
+      : undefined,
+    routingScopedPoolDefaultsConsecutiveErrorThreshold: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsConsecutiveErrorThreshold)
+      : undefined,
+    routingScopedPoolDefaultsPenaltyWindowSeconds: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsPenaltyWindowSeconds)
+      : undefined,
+    routingScopedPoolDefaultsQuotaSnapshotTTLSeconds: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds)
+      : undefined,
+    routingScopedPoolDefaultsIdleLogThrottleSeconds: shouldValidateScopedPool
+      ? getNonNegativeIntegerError(values.routingScopedPoolDefaultsIdleLogThrottleSeconds)
+      : undefined,
+    routingScopedPoolProviders: shouldValidateScopedPool
+      ? getScopedPoolProviderDuplicateError(values.routingScopedPoolProviders)
+      : undefined,
     'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
     'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
     'streaming.nonstreamKeepaliveInterval': getNonNegativeIntegerError(
@@ -823,6 +837,15 @@ function getNextDirtyFields(
         baselineValues.quotaAutoDisableAuthFileOnZeroQuota
     );
   }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'quotaAutoDisableAuthFileQuotaThresholdPercent')
+  ) {
+    updateDirty(
+      'quotaAutoDisableAuthFileQuotaThresholdPercent',
+      nextValues.quotaAutoDisableAuthFileQuotaThresholdPercent ===
+        baselineValues.quotaAutoDisableAuthFileQuotaThresholdPercent
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'quotaAntigravityCredits')) {
     updateDirty(
       'quotaAntigravityCredits',
@@ -1095,6 +1118,9 @@ export function useVisualConfig() {
         quotaAutoDisableAuthFileOnZeroQuota: Boolean(
           quotaExceeded?.['auto-disable-auth-file-on-zero-quota'] ?? false
         ),
+        quotaAutoDisableAuthFileQuotaThresholdPercent: String(
+          quotaExceeded?.['auto-disable-auth-file-quota-threshold-percent'] ?? 0
+        ),
         quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
         routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
@@ -1121,9 +1147,7 @@ export function useVisualConfig() {
         ),
         routingScopedPoolProviders: parseScopedPoolProviderEntries(scopedPool?.providers),
         routingSessionAffinity: Boolean(
-          routing?.['session-affinity'] ??
-            routing?.sessionAffinity ??
-            routing?.['sessionAffinity']
+          routing?.['session-affinity'] ?? routing?.sessionAffinity ?? routing?.['sessionAffinity']
         ),
         routingSessionAffinityTTL:
           typeof routing?.['session-affinity-ttl'] === 'string'
@@ -1235,6 +1259,7 @@ export function useVisualConfig() {
           !values.quotaSwitchProject ||
           !values.quotaSwitchPreviewModel ||
           values.quotaAutoDisableAuthFileOnZeroQuota ||
+          values.quotaAutoDisableAuthFileQuotaThresholdPercent.trim() !== '0' ||
           shouldWriteManagedField(
             doc,
             ['quota-exceeded', 'antigravity-credits'],
@@ -1249,17 +1274,26 @@ export function useVisualConfig() {
             dirtyFields,
             'quotaAntigravityCredits'
           );
+          const writeAutoDisableThreshold =
+            docHas(doc, ['quota-exceeded', 'auto-disable-auth-file-quota-threshold-percent']) ||
+            dirtyFields.has('quotaAutoDisableAuthFileQuotaThresholdPercent') ||
+            values.quotaAutoDisableAuthFileOnZeroQuota ||
+            values.quotaAutoDisableAuthFileQuotaThresholdPercent.trim() !== '0';
           doc.setIn(['quota-exceeded', 'switch-project'], values.quotaSwitchProject);
           doc.setIn(['quota-exceeded', 'switch-preview-model'], values.quotaSwitchPreviewModel);
           doc.setIn(
             ['quota-exceeded', 'auto-disable-auth-file-on-zero-quota'],
             values.quotaAutoDisableAuthFileOnZeroQuota
           );
-          if (writeQuotaAntigravityCredits) {
-            doc.setIn(
-              ['quota-exceeded', 'antigravity-credits'],
-              values.quotaAntigravityCredits
+          if (writeAutoDisableThreshold) {
+            setIntFromStringInDoc(
+              doc,
+              ['quota-exceeded', 'auto-disable-auth-file-quota-threshold-percent'],
+              values.quotaAutoDisableAuthFileQuotaThresholdPercent
             );
+          }
+          if (writeQuotaAntigravityCredits) {
+            doc.setIn(['quota-exceeded', 'antigravity-credits'], values.quotaAntigravityCredits);
           }
           deleteIfMapEmpty(doc, ['quota-exceeded']);
         }

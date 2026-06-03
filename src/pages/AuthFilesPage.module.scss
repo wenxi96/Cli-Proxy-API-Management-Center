@@ -489,10 +489,22 @@
 }
 
 .filterControlsPanel {
-  padding: 14px;
+  position: relative;
+  overflow: hidden;
+  padding: 16px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 8%, transparent),
+      transparent 46%
+    ),
+    color-mix(in srgb, var(--bg-secondary) 56%, transparent);
+
+  @include mobile {
+    padding: 12px;
+  }
 }
 
 .filterControls {
@@ -506,7 +518,7 @@
   }
 
   :global(.input) {
-    height: 40px;
+    height: 42px;
     box-sizing: border-box;
   }
 
@@ -519,6 +531,10 @@
   }
 }
 
+.filterSearchItem {
+  min-width: 0;
+}
+
 .filterItem {
   display: flex;
   flex-direction: column;
@@ -529,8 +545,7 @@
     font-size: 11px;
     color: var(--text-tertiary);
     font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: 0;
     white-space: nowrap;
   }
 }
@@ -538,6 +553,10 @@
 .filterToggleItem {
   min-width: 0;
   grid-column: 1 / -1;
+
+  @include tablet {
+    grid-column: 1 / -1;
+  }
 }
 
 .filterToggleGroup {
@@ -545,16 +564,27 @@
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 8px;
   align-items: stretch;
+  min-height: 42px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
 }
 
 .filterToggleCard {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-width: 0;
+  min-height: 42px;
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 56%, transparent);
+
+  > label {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 .filterToggle {
@@ -574,6 +604,16 @@
   line-height: 1.35;
 }
 
+.searchInput {
+  padding-right: 40px;
+}
+
+.searchIcon {
+  display: block;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
 .pageSizeSelect {
   width: 100%;
   padding: 8px 12px;
@@ -583,7 +623,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: text;
-  height: 40px;
+  height: 42px;
   box-sizing: border-box;
 
   &:focus {
@@ -732,6 +772,10 @@
 
 .kimiCard {
   background-image: linear-gradient(180deg, rgba(220, 232, 255, 0.08), transparent);
+}
+
+.xaiCard {
+  background-image: linear-gradient(180deg, rgba(243, 244, 246, 0.08), transparent);
 }
 
 .quotaSection {
@@ -1750,6 +1794,23 @@
     outline: none;
     border-color: var(--primary-color);
   }
+}
+
+.prefixProxyInvalidContentPreview {
+  width: 100%;
+  max-height: 220px;
+  margin: 0;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .prefixProxyFields {
