@@ -1,6 +1,6 @@
 # CLI Proxy API 管理中心
 
-用于管理与故障排查 **CLI Proxy API** 的单文件 Web UI（React + TypeScript），通过 **Management API** 完成配置、凭据、日志与统计等管理操作。
+用于管理与故障排查 **CLI Proxy API** 的单文件 Web UI（React + TypeScript），通过 **Management API** 完成配置、凭据与日志等管理操作。
 
 [English](README.md)
 
@@ -12,7 +12,7 @@
 
 ## 这是什么（以及不是什么）
 
-- 本仓库只包含 Web 管理界面本身，通过 CLI Proxy API 的 **Management API**（`/v0/management`）读取/修改配置、上传凭据、查看日志与使用统计。
+- 本仓库只包含 Web 管理界面本身，通过 CLI Proxy API 的 **Management API**（`/v0/management`）读取/修改配置、上传凭据与查看日志。
 - 它 **不是** 代理本体，不参与流量转发。
 
 ## 快速开始
@@ -78,11 +78,9 @@ bun run build
 - **AI 提供商**：
   - Gemini/Codex/Claude/Vertex 配置（Base URL、Headers、代理、模型别名、排除模型、Prefix）。
   - OpenAI 兼容提供商（多 Key、Header、自助从 `/v1/models` 拉取并导入模型别名、可选浏览器侧 `chat/completions` 测试）。
-  - Ampcode 集成（上游地址/密钥、强制映射、模型映射表）。
 - **认证文件**：上传/下载/删除 JSON 凭据，筛选/搜索/分页，标记 runtime-only；查看单个凭据可用模型（依赖后端支持）；管理 OAuth 排除模型（支持 `*` 通配符）；配置 OAuth 模型别名映射。
 - **OAuth**：对 Codex、Anthropic/Claude、Antigravity、Gemini CLI、Kimi、xAI/Grok 发起 OAuth/设备码流程并轮询状态；支持提交回调 URL 或 xAI/Grok 页面显示的 code；包含 Vertex JSON 凭据导入与 iFlow Cookie 导入。
 - **配额管理**：管理 Claude、Antigravity、Codex、Gemini CLI 等提供商的配额上限与使用情况。
-- **使用统计**：按小时/天图表、按 API 与按模型统计、缓存/推理 Token 拆分、RPM/TPM 时间窗、可选本地保存的模型价格用于费用估算。
 - **日志**：增量拉取日志、自动刷新、搜索、隐藏管理端流量、清空日志；下载请求错误日志文件。
 - **系统信息**：快捷链接、版本检查、请求日志开关、本地登录信息清理，以及拉取 `/v1/models` 并分组展示（需要至少一个代理 API Key 才能查询模型）。
 
@@ -152,8 +150,6 @@ bun run type-check # tsc --noEmit
 - 复现步骤（服务端版本 + UI 版本）
 - UI 改动截图
 - 验证记录（`bun run lint`、`bun run type-check`、`bun run build`）
-
-如果你维护的是自己的管理面板 fork，并希望同时保留上游镜像、稳定分支和开发分支，可参考 [docs/fork-maintainer-workflow_CN.md](docs/fork-maintainer-workflow_CN.md)。
 
 ## 许可证
 

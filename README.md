@@ -1,6 +1,6 @@
 # CLI Proxy API Management Center
 
-A single-file Web UI (React + TypeScript) for operating and troubleshooting the **CLI Proxy API** via its **Management API** (config, credentials, logs, and usage).
+A single-file Web UI (React + TypeScript) for operating and troubleshooting the **CLI Proxy API** via its **Management API** (config, credentials, and logs).
 
 [中文文档](README_CN.md)
 
@@ -12,7 +12,7 @@ Since version 6.0.19, the Web UI ships with the main program; access it via `/ma
 
 ## What this is (and isn’t)
 
-- This repository is the Web UI only. It talks to the CLI Proxy API **Management API** (`/v0/management`) to read/update config, upload credentials, view logs, and inspect usage.
+- This repository is the Web UI only. It talks to the CLI Proxy API **Management API** (`/v0/management`) to read/update config, upload credentials, and view logs.
 - It is **not** a proxy and does not forward traffic.
 
 ## Quick start
@@ -78,11 +78,9 @@ Check the CLI Proxy API server documentation/config comments for the full authen
 - **AI Providers**:
   - Gemini/Codex/Claude/Vertex key entries (base URL, headers, proxy, model aliases, excluded models, prefix).
   - OpenAI-compatible providers (multiple API keys, custom headers, model alias import via `/v1/models`, optional browser-side "chat/completions" test).
-  - Ampcode integration (upstream URL/key, force mappings, model mapping table).
 - **Auth Files**: upload/download/delete JSON credentials, filter/search/pagination, runtime-only indicators, view supported models per credential (when the server supports it), manage OAuth excluded models (supports `*` wildcards), configure OAuth model alias mappings.
 - **OAuth**: start OAuth/device flows for Codex, Anthropic/Claude, Antigravity, Gemini CLI, Kimi, and xAI/Grok; poll status; submit callback URLs or xAI/Grok displayed codes; import Vertex JSON credentials and iFlow cookies.
 - **Quota Management**: manage quota limits and usage for Claude, Antigravity, Codex, Gemini CLI, and other providers.
-- **Usage**: requests/tokens charts (hour/day), per-API & per-model breakdown, cached/reasoning token breakdown, RPM/TPM window, optional cost estimation with locally-saved model pricing.
 - **Logs**: tail logs with incremental polling, auto-refresh, search, hide management traffic, clear logs; download request error log files.
 - **System**: quick links, update check, request logging toggle, local login data cleanup, and fetch `/v1/models` (grouped view). Requires at least one proxy API key to query models.
 
@@ -152,8 +150,6 @@ Issues and PRs are welcome. Please include:
 - Reproduction steps (server version + UI version)
 - Screenshots for UI changes
 - Verification notes (`bun run lint`, `bun run type-check`, `bun run build`)
-
-Fork maintainers who want to keep this UI fork aligned with upstream while publishing their own `management.html` releases can follow [docs/fork-maintainer-workflow.md](docs/fork-maintainer-workflow.md).
 
 ## License
 

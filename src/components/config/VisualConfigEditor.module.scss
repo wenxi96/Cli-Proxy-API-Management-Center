@@ -462,17 +462,6 @@
   min-width: 0;
 }
 
-.quotaThresholdField {
-  margin-top: -2px;
-  margin-left: 14px;
-  padding-left: 14px;
-  border-left: 2px solid var(--border-color);
-
-  @include mobile {
-    margin-left: 0;
-  }
-}
-
 .fieldLabel {
   color: var(--text-secondary);
   font-size: 12px;
@@ -482,6 +471,10 @@
 
 .fieldControl {
   position: relative;
+}
+
+.quotaThresholdField {
+  min-width: 220px;
 }
 
 .fieldHint {
@@ -536,16 +529,6 @@
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.inactiveNotice {
-  padding: 12px 14px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 .blockHeaderRow {
@@ -623,13 +606,41 @@
 
 .payloadRuleModelRow {
   display: grid;
-  grid-template-columns: 1fr 160px auto;
+  grid-template-columns: 1fr 160px auto auto;
   gap: 8px;
   align-items: center;
 }
 
 .payloadRuleModelRowProtocolFirst {
-  grid-template-columns: 160px 1fr auto;
+  grid-template-columns: 160px 1fr auto auto;
+}
+
+.payloadModelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payloadModelAdvanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border-color);
+}
+
+.payloadAdvancedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.payloadHeaderRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .payloadRuleParamRow {
@@ -637,6 +648,10 @@
   grid-template-columns: 1fr 140px 1fr auto;
   gap: 8px;
   align-items: start;
+}
+
+.payloadRuleRawParamRow {
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1fr) auto;
 }
 
 .payloadRuleParamGroup {
@@ -666,6 +681,7 @@
 
 .payloadRowActionButton {
   flex: 0 0 auto;
+  justify-self: start;
 }
 
 .apiKeyModalInputRow {
@@ -681,6 +697,7 @@
 @media (max-width: 900px) {
   .payloadRuleModelRow,
   .payloadRuleModelRowProtocolFirst,
+  .payloadHeaderRow,
   .payloadRuleParamRow,
   .payloadFilterModelRow {
     grid-template-columns: minmax(0, 1fr);

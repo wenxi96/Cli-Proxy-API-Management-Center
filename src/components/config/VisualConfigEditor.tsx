@@ -21,7 +21,6 @@ import {
   IconSatellite,
   IconSettings,
   IconTimer,
-  IconTrendingUp,
   type IconProps,
 } from '@/components/ui/icons';
 import { ConfigSection } from '@/components/config/ConfigSection';
@@ -41,10 +40,11 @@ import {
   ApiKeysCardEditor,
   PayloadFilterRulesEditor,
   PayloadRulesEditor,
+  StringListEditor,
 } from './VisualConfigEditorBlocks';
 import styles from './VisualConfigEditor.module.scss';
 
-type VisualSectionId = 'server' | 'auth' | 'system' | 'network' | 'quota' | 'streaming' | 'payload';
+type VisualSectionId = 'server' | 'auth' | 'system' | 'quota' | 'streaming' | 'payload';
 
 type VisualSection = {
   id: VisualSectionId;
@@ -205,6 +205,8 @@ export function VisualConfigEditor({
   const isMobile = useMediaQuery('(max-width: 768px)');
   const routingStrategyLabelId = useId();
   const routingStrategyHintId = `${routingStrategyLabelId}-hint`;
+  const disableImageGenerationLabelId = useId();
+  const disableImageGenerationHintId = `${disableImageGenerationLabelId}-hint`;
   const keepaliveInputId = useId();
   const keepaliveHintId = `${keepaliveInputId}-hint`;
   const keepaliveErrorId = `${keepaliveInputId}-error`;
@@ -270,9 +272,18 @@ export function VisualConfigEditor({
 
   const portError = getValidationMessage(t, validationErrors?.port);
   const logsMaxSizeError = getValidationMessage(t, validationErrors?.logsMaxTotalSizeMb);
+  const errorLogsMaxFilesError = getValidationMessage(t, validationErrors?.errorLogsMaxFiles);
+  const redisUsageQueueRetentionError = getValidationMessage(
+    t,
+    validationErrors?.redisUsageQueueRetentionSeconds
+  );
   const requestRetryError = getValidationMessage(t, validationErrors?.requestRetry);
   const maxRetryCredentialsError = getValidationMessage(t, validationErrors?.maxRetryCredentials);
   const maxRetryIntervalError = getValidationMessage(t, validationErrors?.maxRetryInterval);
+  const authAutoRefreshWorkersError = getValidationMessage(
+    t,
+    validationErrors?.authAutoRefreshWorkers
+  );
   const quotaAutoDisableThresholdError = getValidationMessage(
     t,
     validationErrors?.quotaAutoDisableAuthFileQuotaThresholdPercent
@@ -319,6 +330,10 @@ export function VisualConfigEditor({
 
   const handleApiKeysTextChange = useCallback(
     (apiKeysText: string) => onChange({ apiKeysText }),
+    [onChange]
+  );
+  const handlePluginStoreSourcesChange = useCallback(
+    (pluginStoreSources: string[]) => onChange({ pluginStoreSources }),
     [onChange]
   );
   const handlePayloadDefaultRulesChange = useCallback(
@@ -394,6 +409,23 @@ export function VisualConfigEditor({
     },
     [onChange, values.routingScopedPoolProviders]
   );
+  const disableImageGenerationOptions = useMemo(
+    () => [
+      {
+        value: 'false',
+        label: t('config_management.visual.sections.network.disable_image_generation_false'),
+      },
+      {
+        value: 'true',
+        label: t('config_management.visual.sections.network.disable_image_generation_true'),
+      },
+      {
+        value: 'chat',
+        label: t('config_management.visual.sections.network.disable_image_generation_chat'),
+      },
+    ],
+    [t]
+  );
 
   const countErrors = useCallback(
     (fields: VisualConfigFieldPath[]) =>
@@ -433,17 +465,14 @@ export function VisualConfigEditor({
         id: 'system',
         title: t('config_management.visual.sections.system.title'),
         icon: IconDiamond,
-        errorCount: countErrors(['logsMaxTotalSizeMb']),
-      },
-      {
-        id: 'network',
-        title: t('config_management.visual.sections.network.title'),
-        description: t('config_management.visual.sections.network.description'),
-        icon: IconTrendingUp,
         errorCount: countErrors([
+          'errorLogsMaxFiles',
+          'logsMaxTotalSizeMb',
+          'redisUsageQueueRetentionSeconds',
           'requestRetry',
           'maxRetryCredentials',
           'maxRetryInterval',
+          'authAutoRefreshWorkers',
           ...(isScopedPoolFieldsVisible
             ? ([
                 'routingScopedPoolDefaultsLimit',
@@ -453,7 +482,7 @@ export function VisualConfigEditor({
                 'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds',
                 'routingScopedPoolDefaultsIdleLogThrottleSeconds',
                 'routingScopedPoolProviders',
-              ] satisfies VisualConfigFieldPath[])
+              ] as VisualConfigFieldPath[])
             : []),
         ]),
       },
@@ -482,13 +511,7 @@ export function VisualConfigEditor({
         errorCount: hasPayloadValidationErrors ? 1 : 0,
       },
     ],
-    [
-      countErrors,
-      hasPayloadValidationErrors,
-      isScopedPoolFieldsVisible,
-      t,
-      values.quotaAutoDisableAuthFileOnZeroQuota,
-    ]
+    [countErrors, hasPayloadValidationErrors, isScopedPoolFieldsVisible, t, values.quotaAutoDisableAuthFileOnZeroQuota]
   );
 
   const hasValidationIssues =
@@ -733,6 +756,19 @@ export function VisualConfigEditor({
                       disabled={disabled}
                       onChange={(rmDisableControlPanel) => onChange({ rmDisableControlPanel })}
                     />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.remote.disable_auto_update_panel'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.remote.disable_auto_update_panel_desc'
+                      )}
+                      checked={values.rmDisableAutoUpdatePanel}
+                      disabled={disabled}
+                      onChange={(rmDisableAutoUpdatePanel) =>
+                        onChange({ rmDisableAutoUpdatePanel })
+                      }
+                    />
                   </SectionGrid>
                   <SectionGrid>
                     <Input
@@ -821,13 +857,40 @@ export function VisualConfigEditor({
                   onChange={(loggingToFile) => onChange({ loggingToFile })}
                 />
                 <ToggleRow
-                  title={t('config_management.visual.sections.system.usage_statistics')}
-                  description={t('config_management.visual.sections.system.usage_statistics_desc')}
-                  checked={values.usageStatisticsEnabled}
+                  title={t('config_management.visual.sections.system.plugins_enabled')}
+                  description={t('config_management.visual.sections.system.plugins_enabled_desc')}
+                  checked={values.pluginsEnabled}
                   disabled={disabled}
-                  onChange={(usageStatisticsEnabled) => onChange({ usageStatisticsEnabled })}
+                  onChange={(pluginsEnabled) => onChange({ pluginsEnabled })}
                 />
               </SectionGrid>
+
+              <SectionSubsection
+                title={t('config_management.visual.sections.system.plugin_store_sources')}
+                description={t(
+                  'config_management.visual.sections.system.plugin_store_sources_desc'
+                )}
+              >
+                <div className={styles.fieldShell}>
+                  <label className={styles.fieldLabel}>
+                    {t('config_management.visual.sections.system.plugin_store_sources_label')}
+                  </label>
+                  <StringListEditor
+                    value={values.pluginStoreSources}
+                    disabled={disabled}
+                    placeholder={t(
+                      'config_management.visual.sections.system.plugin_store_sources_placeholder'
+                    )}
+                    inputAriaLabel={t(
+                      'config_management.visual.sections.system.plugin_store_sources_label'
+                    )}
+                    onChange={handlePluginStoreSourcesChange}
+                  />
+                  <div className={styles.fieldHint}>
+                    {t('config_management.visual.sections.system.plugin_store_sources_hint')}
+                  </div>
+                </div>
+              </SectionSubsection>
 
               <SectionGrid>
                 <Input
@@ -839,455 +902,692 @@ export function VisualConfigEditor({
                   disabled={disabled}
                   error={logsMaxSizeError}
                 />
-              </SectionGrid>
-            </SectionStack>
-          </ConfigSection>
-
-          <ConfigSection
-            id="network"
-            ref={(node) => {
-              sectionRefs.current.network = node;
-            }}
-            indexLabel="04"
-            icon={<IconTrendingUp size={16} />}
-            title={t('config_management.visual.sections.network.title')}
-            description={t('config_management.visual.sections.network.description')}
-          >
-            <SectionStack>
-              <SectionGrid>
                 <Input
-                  label={t('config_management.visual.sections.network.proxy_url')}
-                  placeholder="socks5://user:pass@127.0.0.1:1080/"
-                  value={values.proxyUrl}
-                  onChange={(e) => onChange({ proxyUrl: e.target.value })}
-                  disabled={disabled}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.request_retry')}
+                  label={t('config_management.visual.sections.system.error_logs_max_files')}
                   type="number"
-                  placeholder="3"
-                  value={values.requestRetry}
-                  onChange={(e) => onChange({ requestRetry: e.target.value })}
+                  placeholder="10"
+                  value={values.errorLogsMaxFiles}
+                  onChange={(e) => onChange({ errorLogsMaxFiles: e.target.value })}
                   disabled={disabled}
-                  error={requestRetryError}
+                  error={errorLogsMaxFilesError}
                 />
                 <Input
-                  label={t('config_management.visual.sections.network.max_retry_credentials')}
+                  label={t('config_management.visual.sections.system.redis_usage_retention')}
                   type="number"
-                  placeholder="0"
-                  value={values.maxRetryCredentials}
-                  onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
+                  placeholder="60"
+                  value={values.redisUsageQueueRetentionSeconds}
+                  onChange={(e) => onChange({ redisUsageQueueRetentionSeconds: e.target.value })}
                   disabled={disabled}
-                  hint={t('config_management.visual.sections.network.max_retry_credentials_hint')}
-                  error={maxRetryCredentialsError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.max_retry_interval')}
-                  type="number"
-                  placeholder="30"
-                  value={values.maxRetryInterval}
-                  onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
-                  disabled={disabled}
-                  error={maxRetryIntervalError}
-                />
-                <FieldShell
-                  label={t('config_management.visual.sections.network.routing_strategy')}
-                  labelId={routingStrategyLabelId}
-                  hint={t('config_management.visual.sections.network.routing_strategy_hint')}
-                  hintId={routingStrategyHintId}
-                >
-                  <Select
-                    value={values.routingStrategy}
-                    options={[
-                      {
-                        value: 'round-robin',
-                        label: t('config_management.visual.sections.network.strategy_round_robin'),
-                      },
-                      {
-                        value: 'fill-first',
-                        label: t('config_management.visual.sections.network.strategy_fill_first'),
-                      },
-                    ]}
-                    id={`${routingStrategyLabelId}-select`}
-                    disabled={disabled}
-                    ariaLabelledBy={routingStrategyLabelId}
-                    ariaDescribedBy={routingStrategyHintId}
-                    onChange={(nextValue) =>
-                      onChange({
-                        routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
-                      })
-                    }
-                  />
-                </FieldShell>
-                <Input
-                  label={t('config_management.visual.sections.network.session_affinity_ttl')}
-                  placeholder="1h"
-                  value={values.routingSessionAffinityTTL}
-                  onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
-                  disabled={disabled}
+                  hint={t('config_management.visual.sections.system.redis_usage_retention_hint')}
+                  error={redisUsageQueueRetentionError}
                 />
               </SectionGrid>
-
               <SectionGrid>
                 <ToggleRow
-                  title={t('config_management.visual.sections.network.force_model_prefix')}
+                  title={t('config_management.visual.sections.system.usage_statistics_enabled')}
                   description={t(
-                    'config_management.visual.sections.network.force_model_prefix_desc'
+                    'config_management.visual.sections.system.usage_statistics_enabled_desc'
                   )}
-                  checked={values.forceModelPrefix}
+                  checked={values.usageStatisticsEnabled}
                   disabled={disabled}
-                  onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
+                  onChange={(usageStatisticsEnabled) => onChange({ usageStatisticsEnabled })}
                 />
                 <ToggleRow
-                  title={t('config_management.visual.sections.network.session_affinity')}
-                  checked={values.routingSessionAffinity}
+                  title={t('config_management.visual.sections.system.antigravity_signature_cache')}
+                  description={t(
+                    'config_management.visual.sections.system.antigravity_signature_cache_desc'
+                  )}
+                  checked={values.antigravitySignatureCacheEnabled}
                   disabled={disabled}
-                  onChange={(routingSessionAffinity) => onChange({ routingSessionAffinity })}
+                  onChange={(antigravitySignatureCacheEnabled) =>
+                    onChange({ antigravitySignatureCacheEnabled })
+                  }
                 />
                 <ToggleRow
-                  title={t('config_management.visual.sections.network.ws_auth')}
-                  description={t('config_management.visual.sections.network.ws_auth_desc')}
-                  checked={values.wsAuth}
+                  title={t('config_management.visual.sections.system.antigravity_signature_strict')}
+                  description={t(
+                    'config_management.visual.sections.system.antigravity_signature_strict_desc'
+                  )}
+                  checked={values.antigravitySignatureBypassStrict}
                   disabled={disabled}
-                  onChange={(wsAuth) => onChange({ wsAuth })}
+                  onChange={(antigravitySignatureBypassStrict) =>
+                    onChange({ antigravitySignatureBypassStrict })
+                  }
                 />
               </SectionGrid>
 
-              {isScopedPoolStrategyActive ? (
-                <SectionSubsection
-                  title={t('config_management.visual.sections.network.scoped_pool_title')}
-                  description={t('config_management.visual.sections.network.scoped_pool_desc')}
-                >
-                  <SectionStack>
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.scoped_pool_enabled')}
-                      description={t(
-                        'config_management.visual.sections.network.scoped_pool_enabled_desc'
-                      )}
-                      checked={values.routingScopedPoolEnabled}
+              <SectionSubsection
+                title={t('config_management.visual.sections.headers.title')}
+                description={t('config_management.visual.sections.headers.description')}
+              >
+                <SectionStack>
+                  <div className={styles.subsectionHeader}>
+                    <h3 className={styles.subsectionTitle}>
+                      {t('config_management.visual.sections.headers.claude_title')}
+                    </h3>
+                  </div>
+                  <SectionGrid>
+                    <Input
+                      label={t('config_management.visual.sections.headers.user_agent')}
+                      placeholder="claude-cli/2.1.44 (external, sdk-cli)"
+                      value={values.claudeHeaderUserAgent}
+                      onChange={(e) => onChange({ claudeHeaderUserAgent: e.target.value })}
                       disabled={disabled}
-                      onChange={(routingScopedPoolEnabled) =>
-                        onChange({ routingScopedPoolEnabled })
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.package_version')}
+                      placeholder="0.74.0"
+                      value={values.claudeHeaderPackageVersion}
+                      onChange={(e) => onChange({ claudeHeaderPackageVersion: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.runtime_version')}
+                      placeholder="v24.3.0"
+                      value={values.claudeHeaderRuntimeVersion}
+                      onChange={(e) => onChange({ claudeHeaderRuntimeVersion: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.os')}
+                      placeholder="MacOS"
+                      value={values.claudeHeaderOs}
+                      onChange={(e) => onChange({ claudeHeaderOs: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.arch')}
+                      placeholder="arm64"
+                      value={values.claudeHeaderArch}
+                      onChange={(e) => onChange({ claudeHeaderArch: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.timeout')}
+                      placeholder="600"
+                      value={values.claudeHeaderTimeout}
+                      onChange={(e) => onChange({ claudeHeaderTimeout: e.target.value })}
+                      disabled={disabled}
+                    />
+                  </SectionGrid>
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.headers.stabilize_device')}
+                      description={t(
+                        'config_management.visual.sections.headers.stabilize_device_desc'
+                      )}
+                      checked={values.claudeHeaderStabilizeDeviceProfile}
+                      disabled={disabled}
+                      onChange={(claudeHeaderStabilizeDeviceProfile) =>
+                        onChange({ claudeHeaderStabilizeDeviceProfile })
                       }
                     />
+                  </SectionGrid>
+                  <Divider />
+                  <div className={styles.subsectionHeader}>
+                    <h3 className={styles.subsectionTitle}>
+                      {t('config_management.visual.sections.headers.codex_title')}
+                    </h3>
+                  </div>
+                  <SectionGrid>
+                    <Input
+                      label={t('config_management.visual.sections.headers.user_agent')}
+                      placeholder="codex_cli_rs/0.114.0 (Mac OS 14.2.0; x86_64) vscode/1.111.0"
+                      value={values.codexHeaderUserAgent}
+                      onChange={(e) => onChange({ codexHeaderUserAgent: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.headers.beta_features')}
+                      placeholder="multi_agent"
+                      value={values.codexHeaderBetaFeatures}
+                      onChange={(e) => onChange({ codexHeaderBetaFeatures: e.target.value })}
+                      disabled={disabled}
+                    />
+                  </SectionGrid>
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.headers.codex_identity_confuse')}
+                      description={t(
+                        'config_management.visual.sections.headers.codex_identity_confuse_desc'
+                      )}
+                      checked={values.codexIdentityConfuse}
+                      disabled={disabled}
+                      onChange={(codexIdentityConfuse) => onChange({ codexIdentityConfuse })}
+                    />
+                  </SectionGrid>
+                </SectionStack>
+              </SectionSubsection>
 
-                    {values.routingScopedPoolEnabled ? (
-                      <>
-                        <SectionGrid>
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_limit'
-                            )}
-                            type="number"
-                            placeholder="5"
-                            value={values.routingScopedPoolDefaultsLimit}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsLimit',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            error={scopedPoolDefaultsLimitError}
-                          />
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
-                            )}
-                            type="number"
-                            placeholder="0"
-                            value={values.routingScopedPoolDefaultsQuotaThresholdPercent}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsQuotaThresholdPercent',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            hint={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent_hint'
-                            )}
-                            error={scopedPoolDefaultsQuotaThresholdPercentError}
-                          />
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
-                            )}
-                            type="number"
-                            placeholder="3"
-                            value={values.routingScopedPoolDefaultsConsecutiveErrorThreshold}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsConsecutiveErrorThreshold',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            error={scopedPoolDefaultsConsecutiveErrorThresholdError}
-                          />
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
-                            )}
-                            type="number"
-                            placeholder="300"
-                            value={values.routingScopedPoolDefaultsPenaltyWindowSeconds}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsPenaltyWindowSeconds',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            error={scopedPoolDefaultsPenaltyWindowSecondsError}
-                          />
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
-                            )}
-                            type="number"
-                            placeholder="300"
-                            value={values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            error={scopedPoolDefaultsQuotaSnapshotTTLSecondsError}
-                          />
-                          <Input
-                            label={t(
-                              'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
-                            )}
-                            type="number"
-                            placeholder="60"
-                            value={values.routingScopedPoolDefaultsIdleLogThrottleSeconds}
-                            onChange={(e) =>
-                              handleScopedPoolDefaultsChange(
-                                'routingScopedPoolDefaultsIdleLogThrottleSeconds',
-                                e.target.value
-                              )
-                            }
-                            disabled={disabled}
-                            error={scopedPoolDefaultsIdleLogThrottleSecondsError}
-                          />
-                        </SectionGrid>
+              <SectionSubsection
+                title={t('config_management.visual.sections.network.title')}
+                description={t('config_management.visual.sections.network.description')}
+              >
+                <SectionStack>
+                  <SectionGrid>
+                    <Input
+                      label={t('config_management.visual.sections.network.proxy_url')}
+                      placeholder="socks5://user:pass@127.0.0.1:1080/"
+                      value={values.proxyUrl}
+                      onChange={(e) => onChange({ proxyUrl: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.request_retry')}
+                      type="number"
+                      placeholder="3"
+                      value={values.requestRetry}
+                      onChange={(e) => onChange({ requestRetry: e.target.value })}
+                      disabled={disabled}
+                      error={requestRetryError}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.max_retry_credentials')}
+                      type="number"
+                      placeholder="0"
+                      value={values.maxRetryCredentials}
+                      onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.max_retry_credentials_hint'
+                      )}
+                      error={maxRetryCredentialsError}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.max_retry_interval')}
+                      type="number"
+                      placeholder="30"
+                      value={values.maxRetryInterval}
+                      onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
+                      disabled={disabled}
+                      error={maxRetryIntervalError}
+                    />
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.network.auth_auto_refresh_workers'
+                      )}
+                      type="number"
+                      placeholder="16"
+                      value={values.authAutoRefreshWorkers}
+                      onChange={(e) => onChange({ authAutoRefreshWorkers: e.target.value })}
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.auth_auto_refresh_workers_hint'
+                      )}
+                      error={authAutoRefreshWorkersError}
+                    />
+                    <FieldShell
+                      label={t('config_management.visual.sections.network.routing_strategy')}
+                      labelId={routingStrategyLabelId}
+                      hint={t('config_management.visual.sections.network.routing_strategy_hint')}
+                      hintId={routingStrategyHintId}
+                    >
+                      <Select
+                        value={values.routingStrategy}
+                        options={[
+                          {
+                            value: 'round-robin',
+                            label: t(
+                              'config_management.visual.sections.network.strategy_round_robin'
+                            ),
+                          },
+                          {
+                            value: 'fill-first',
+                            label: t(
+                              'config_management.visual.sections.network.strategy_fill_first'
+                            ),
+                          },
+                        ]}
+                        id={`${routingStrategyLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={routingStrategyLabelId}
+                        ariaDescribedBy={routingStrategyHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.network.disable_image_generation'
+                      )}
+                      labelId={disableImageGenerationLabelId}
+                      hint={t(
+                        'config_management.visual.sections.network.disable_image_generation_hint'
+                      )}
+                      hintId={disableImageGenerationHintId}
+                    >
+                      <Select
+                        value={values.disableImageGeneration}
+                        options={disableImageGenerationOptions}
+                        id={`${disableImageGenerationLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={disableImageGenerationLabelId}
+                        ariaDescribedBy={disableImageGenerationHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            disableImageGeneration:
+                              nextValue as VisualConfigValues['disableImageGeneration'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <Input
+                      label={t('config_management.visual.sections.network.gpt_image_2_base_model')}
+                      placeholder="gpt-5.4-mini"
+                      value={values.gptImage2BaseModel}
+                      onChange={(e) => onChange({ gptImage2BaseModel: e.target.value })}
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.gpt_image_2_base_model_hint'
+                      )}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.session_affinity_ttl')}
+                      placeholder="1h"
+                      value={values.routingSessionAffinityTTL}
+                      onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
+                      disabled={disabled}
+                    />
+                  </SectionGrid>
 
-                        <Divider />
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.force_model_prefix')}
+                      description={t(
+                        'config_management.visual.sections.network.force_model_prefix_desc'
+                      )}
+                      checked={values.forceModelPrefix}
+                      disabled={disabled}
+                      onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.passthrough_headers')}
+                      description={t(
+                        'config_management.visual.sections.network.passthrough_headers_desc'
+                      )}
+                      checked={values.passthroughHeaders}
+                      disabled={disabled}
+                      onChange={(passthroughHeaders) => onChange({ passthroughHeaders })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.disable_cooling')}
+                      description={t(
+                        'config_management.visual.sections.network.disable_cooling_desc'
+                      )}
+                      checked={values.disableCooling}
+                      disabled={disabled}
+                      onChange={(disableCooling) => onChange({ disableCooling })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.session_affinity')}
+                      checked={values.routingSessionAffinity}
+                      disabled={disabled}
+                      onChange={(routingSessionAffinity) => onChange({ routingSessionAffinity })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.ws_auth')}
+                      description={t('config_management.visual.sections.network.ws_auth_desc')}
+                      checked={values.wsAuth}
+                      disabled={disabled}
+                      onChange={(wsAuth) => onChange({ wsAuth })}
+                    />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.network.enable_gemini_cli_endpoint'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.network.enable_gemini_cli_endpoint_desc'
+                      )}
+                      checked={values.enableGeminiCliEndpoint}
+                      disabled={disabled}
+                      onChange={(enableGeminiCliEndpoint) => onChange({ enableGeminiCliEndpoint })}
+                    />
+                  </SectionGrid>
 
-                        <div className={styles.blockStack}>
-                          <div className={styles.blockHeaderRow}>
-                            <div className={styles.subsectionHeader}>
-                              <h3 className={styles.subsectionTitle}>
-                                {t(
-                                  'config_management.visual.sections.network.scoped_pool_providers_title'
+                  {isScopedPoolStrategyActive ? (
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.network.scoped_pool_title')}
+                      description={t('config_management.visual.sections.network.scoped_pool_desc')}
+                    >
+                      <SectionStack>
+                        <ToggleRow
+                          title={t(
+                            'config_management.visual.sections.network.scoped_pool_enabled'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.network.scoped_pool_enabled_desc'
+                          )}
+                          checked={values.routingScopedPoolEnabled}
+                          disabled={disabled}
+                          onChange={(routingScopedPoolEnabled) =>
+                            onChange({ routingScopedPoolEnabled })
+                          }
+                        />
+
+                        {values.routingScopedPoolEnabled ? (
+                          <>
+                            <SectionGrid>
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_limit'
                                 )}
-                              </h3>
-                              <p className={styles.subsectionDescription}>
-                                {t(
-                                  'config_management.visual.sections.network.scoped_pool_providers_desc'
+                                type="number"
+                                placeholder="5"
+                                value={values.routingScopedPoolDefaultsLimit}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsLimit',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                error={scopedPoolDefaultsLimitError}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
                                 )}
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={handleAddScopedPoolProviderEntry}
-                              disabled={disabled}
-                            >
-                              {t(
-                                'config_management.visual.sections.network.scoped_pool_providers_add'
-                              )}
-                            </Button>
-                          </div>
+                                type="number"
+                                placeholder="0"
+                                value={values.routingScopedPoolDefaultsQuotaThresholdPercent}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsQuotaThresholdPercent',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                hint={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent_hint'
+                                )}
+                                error={scopedPoolDefaultsQuotaThresholdPercentError}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
+                                )}
+                                type="number"
+                                placeholder="3"
+                                value={values.routingScopedPoolDefaultsConsecutiveErrorThreshold}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsConsecutiveErrorThreshold',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                error={scopedPoolDefaultsConsecutiveErrorThresholdError}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
+                                )}
+                                type="number"
+                                placeholder="300"
+                                value={values.routingScopedPoolDefaultsPenaltyWindowSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsPenaltyWindowSeconds',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                error={scopedPoolDefaultsPenaltyWindowSecondsError}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
+                                )}
+                                type="number"
+                                placeholder="300"
+                                value={values.routingScopedPoolDefaultsQuotaSnapshotTTLSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsQuotaSnapshotTTLSeconds',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                error={scopedPoolDefaultsQuotaSnapshotTTLSecondsError}
+                              />
+                              <Input
+                                label={t(
+                                  'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
+                                )}
+                                type="number"
+                                placeholder="60"
+                                value={values.routingScopedPoolDefaultsIdleLogThrottleSeconds}
+                                onChange={(e) =>
+                                  handleScopedPoolDefaultsChange(
+                                    'routingScopedPoolDefaultsIdleLogThrottleSeconds',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={disabled}
+                                error={scopedPoolDefaultsIdleLogThrottleSecondsError}
+                              />
+                            </SectionGrid>
 
-                          {scopedPoolProvidersError ? (
-                            <div className="error-box">{scopedPoolProvidersError}</div>
-                          ) : null}
+                            <Divider />
 
-                          {values.routingScopedPoolProviders.length === 0 ? (
-                            <div className={styles.emptyState}>
-                              {t(
-                                'config_management.visual.sections.network.scoped_pool_providers_empty'
-                              )}
-                            </div>
-                          ) : (
-                            values.routingScopedPoolProviders.map((entry, index) => {
-                              const providerKey = entry.provider.trim().toLowerCase();
-                              const providerDuplicate =
-                                providerKey !== '' &&
-                                duplicateScopedPoolProviderKeys.has(providerKey);
+                            <div className={styles.blockStack}>
+                              <div className={styles.blockHeaderRow}>
+                                <div className={styles.subsectionHeader}>
+                                  <h3 className={styles.subsectionTitle}>
+                                    {t(
+                                      'config_management.visual.sections.network.scoped_pool_providers_title'
+                                    )}
+                                  </h3>
+                                  <p className={styles.subsectionDescription}>
+                                    {t(
+                                      'config_management.visual.sections.network.scoped_pool_providers_desc'
+                                    )}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={handleAddScopedPoolProviderEntry}
+                                  disabled={disabled}
+                                >
+                                  {t(
+                                    'config_management.visual.sections.network.scoped_pool_providers_add'
+                                  )}
+                                </Button>
+                              </div>
 
-                              return (
-                                <div key={entry.id} className={styles.ruleCard}>
-                                  <div className={styles.ruleCardHeader}>
-                                    <div className={styles.ruleCardTitle}>
-                                      {entry.provider.trim() ||
-                                        t(
-                                          'config_management.visual.sections.network.scoped_pool_provider_title',
-                                          {
-                                            index: index + 1,
+                              {scopedPoolProvidersError ? (
+                                <div className="error-box">{scopedPoolProvidersError}</div>
+                              ) : null}
+
+                              {values.routingScopedPoolProviders.length === 0 ? (
+                                <div className={styles.emptyState}>
+                                  {t(
+                                    'config_management.visual.sections.network.scoped_pool_providers_empty'
+                                  )}
+                                </div>
+                              ) : (
+                                values.routingScopedPoolProviders.map((entry, index) => {
+                                  const providerKey = entry.provider.trim().toLowerCase();
+                                  const providerDuplicate =
+                                    providerKey !== '' &&
+                                    duplicateScopedPoolProviderKeys.has(providerKey);
+
+                                  return (
+                                    <div key={entry.id} className={styles.ruleCard}>
+                                      <div className={styles.ruleCardHeader}>
+                                        <div className={styles.ruleCardTitle}>
+                                          {entry.provider.trim() ||
+                                            t(
+                                              'config_management.visual.sections.network.scoped_pool_provider_title',
+                                              {
+                                                index: index + 1,
+                                              }
+                                            )}
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleRemoveScopedPoolProviderEntry(entry.id)
                                           }
-                                        )}
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleRemoveScopedPoolProviderEntry(entry.id)}
-                                      disabled={disabled}
-                                    >
-                                      {t(
-                                        'config_management.visual.sections.network.scoped_pool_provider_remove'
-                                      )}
-                                    </Button>
-                                  </div>
+                                          disabled={disabled}
+                                        >
+                                          {t(
+                                            'config_management.visual.sections.network.scoped_pool_provider_remove'
+                                          )}
+                                        </Button>
+                                      </div>
 
-                                  <ToggleRow
-                                    title={t(
-                                      'config_management.visual.sections.network.scoped_pool_provider_enabled'
-                                    )}
-                                    description={t(
-                                      'config_management.visual.sections.network.scoped_pool_provider_enabled_desc'
-                                    )}
-                                    checked={entry.enabled}
-                                    disabled={disabled}
-                                    onChange={(enabled) =>
-                                      handleScopedPoolProviderEntryChange(entry.id, { enabled })
-                                    }
-                                  />
-
-                                  <SectionGrid>
-                                    <FieldShell
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_provider_name'
-                                      )}
-                                      hint={t(
-                                        'config_management.visual.sections.network.scoped_pool_provider_name_hint'
-                                      )}
-                                      error={
-                                        providerDuplicate
-                                          ? t(
-                                              'config_management.visual.validation.duplicate_provider_key'
-                                            )
-                                          : undefined
-                                      }
-                                    >
-                                      <Select
-                                        value={entry.provider}
-                                        options={
-                                          scopedPoolProviderOptionsByEntry[entry.id] ??
-                                          scopedPoolProviderBaseOptions
-                                        }
-                                        placeholder={t(
-                                          'config_management.visual.sections.network.scoped_pool_provider_name_placeholder'
+                                      <ToggleRow
+                                        title={t(
+                                          'config_management.visual.sections.network.scoped_pool_provider_enabled'
                                         )}
+                                        description={t(
+                                          'config_management.visual.sections.network.scoped_pool_provider_enabled_desc'
+                                        )}
+                                        checked={entry.enabled}
                                         disabled={disabled}
-                                        onChange={(nextValue) =>
-                                          handleScopedPoolProviderEntryChange(entry.id, {
-                                            provider: nextValue.toLowerCase(),
-                                          })
+                                        onChange={(enabled) =>
+                                          handleScopedPoolProviderEntryChange(entry.id, { enabled })
                                         }
                                       />
-                                    </FieldShell>
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_limit'
-                                      )}
-                                      type="number"
-                                      placeholder="5"
-                                      value={entry.limit}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          limit: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
-                                      )}
-                                      type="number"
-                                      placeholder="0"
-                                      value={entry.quotaThresholdPercent}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          quotaThresholdPercent: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
-                                      )}
-                                      type="number"
-                                      placeholder="3"
-                                      value={entry.consecutiveErrorThreshold}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          consecutiveErrorThreshold: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
-                                      )}
-                                      type="number"
-                                      placeholder="300"
-                                      value={entry.penaltyWindowSeconds}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          penaltyWindowSeconds: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
-                                      )}
-                                      type="number"
-                                      placeholder="300"
-                                      value={entry.quotaSnapshotTTLSeconds}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          quotaSnapshotTTLSeconds: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                    <Input
-                                      label={t(
-                                        'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
-                                      )}
-                                      type="number"
-                                      placeholder="60"
-                                      value={entry.idleLogThrottleSeconds}
-                                      onChange={(e) =>
-                                        handleScopedPoolProviderEntryChange(entry.id, {
-                                          idleLogThrottleSeconds: e.target.value,
-                                        })
-                                      }
-                                      disabled={disabled}
-                                    />
-                                  </SectionGrid>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </>
-                    ) : null}
-                  </SectionStack>
-                </SectionSubsection>
-              ) : null}
+
+                                      <SectionGrid>
+                                        <FieldShell
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_provider_name'
+                                          )}
+                                          hint={t(
+                                            'config_management.visual.sections.network.scoped_pool_provider_name_hint'
+                                          )}
+                                          error={
+                                            providerDuplicate
+                                              ? t(
+                                                  'config_management.visual.validation.duplicate_provider_key'
+                                                )
+                                              : undefined
+                                          }
+                                        >
+                                          <Select
+                                            value={entry.provider}
+                                            options={
+                                              scopedPoolProviderOptionsByEntry[entry.id] ??
+                                              scopedPoolProviderBaseOptions
+                                            }
+                                            placeholder={t(
+                                              'config_management.visual.sections.network.scoped_pool_provider_name_placeholder'
+                                            )}
+                                            disabled={disabled}
+                                            onChange={(nextValue) =>
+                                              handleScopedPoolProviderEntryChange(entry.id, {
+                                                provider: nextValue.toLowerCase(),
+                                              })
+                                            }
+                                          />
+                                        </FieldShell>
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_limit'
+                                          )}
+                                          type="number"
+                                          placeholder="5"
+                                          value={entry.limit}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              limit: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_quota_threshold_percent'
+                                          )}
+                                          type="number"
+                                          placeholder="0"
+                                          value={entry.quotaThresholdPercent}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              quotaThresholdPercent: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_consecutive_error_threshold'
+                                          )}
+                                          type="number"
+                                          placeholder="3"
+                                          value={entry.consecutiveErrorThreshold}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              consecutiveErrorThreshold: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_penalty_window_seconds'
+                                          )}
+                                          type="number"
+                                          placeholder="300"
+                                          value={entry.penaltyWindowSeconds}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              penaltyWindowSeconds: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_quota_snapshot_ttl_seconds'
+                                          )}
+                                          type="number"
+                                          placeholder="300"
+                                          value={entry.quotaSnapshotTTLSeconds}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              quotaSnapshotTTLSeconds: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                        <Input
+                                          label={t(
+                                            'config_management.visual.sections.network.scoped_pool_defaults_idle_log_throttle_seconds'
+                                          )}
+                                          type="number"
+                                          placeholder="60"
+                                          value={entry.idleLogThrottleSeconds}
+                                          onChange={(e) =>
+                                            handleScopedPoolProviderEntryChange(entry.id, {
+                                              idleLogThrottleSeconds: e.target.value,
+                                            })
+                                          }
+                                          disabled={disabled}
+                                        />
+                                      </SectionGrid>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </>
+                        ) : null}
+                      </SectionStack>
+                    </SectionSubsection>
+                  ) : null}
+                </SectionStack>
+              </SectionSubsection>
             </SectionStack>
           </ConfigSection>
 
@@ -1296,7 +1596,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.quota = node;
             }}
-            indexLabel="05"
+            indexLabel="04"
             icon={<IconTimer size={16} />}
             title={t('config_management.visual.sections.quota.title')}
             description={t('config_management.visual.sections.quota.description')}
@@ -1383,7 +1683,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.streaming = node;
             }}
-            indexLabel="06"
+            indexLabel="05"
             icon={<IconSatellite size={16} />}
             title={t('config_management.visual.sections.streaming.title')}
             description={t('config_management.visual.sections.streaming.description')}
@@ -1484,7 +1784,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.payload = node;
             }}
-            indexLabel="07"
+            indexLabel="06"
             icon={<IconCode size={16} />}
             title={t('config_management.visual.sections.payload.title')}
             description={t('config_management.visual.sections.payload.description')}
