@@ -68,26 +68,35 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
   return locale ? date.toLocaleString(locale) : date.toLocaleString();
 }
 
-/**
- * 格式化日期时间
- */
-export function formatDateTime(date: string | Date, locale?: string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) return '';
-  return locale ? d.toLocaleString(locale) : d.toLocaleString();
+export function parseDateValue(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+
+  const date =
+    typeof value === 'number'
+      ? new Date(value < 1e12 ? value * 1000 : value)
+      : (parseTimestamp(value) ?? new Date(String(value)));
+
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/**
- * 格式化数字
- */
+export function formatDateValue(value: unknown, locale?: string): string {
+  const date = parseDateValue(value);
+  if (!date) return '';
+  return locale ? date.toLocaleDateString(locale) : date.toLocaleDateString();
+}
+
+export function formatDateTimeValue(value: unknown, locale?: string): string {
+  const date = parseDateValue(value);
+  if (!date) return '';
+  return locale ? date.toLocaleString(locale) : date.toLocaleString();
+}
+
+export function formatDateTime(date: string | Date, locale?: string): string {
+  const value = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return '';
+  return locale ? value.toLocaleString(locale) : value.toLocaleString();
+}
+
 export function formatNumber(num: number, locale?: string): string {
   return locale ? num.toLocaleString(locale) : num.toLocaleString();
-}
-
-/**
- * 截断文本
- */
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + '...';
 }

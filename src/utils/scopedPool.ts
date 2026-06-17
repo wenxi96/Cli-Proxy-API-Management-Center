@@ -6,7 +6,7 @@ import type {
   OpenAIProviderConfig,
   ProviderKeyConfig,
 } from '@/types';
-import { normalizeAuthIndex } from '@/utils/usage';
+import { normalizeAuthIndex } from '@/utils/authIndex';
 
 type ProviderBindingInput = {
   geminiKeys: GeminiKeyConfig[];

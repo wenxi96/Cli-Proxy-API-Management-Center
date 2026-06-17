@@ -2,32 +2,24 @@ import { useTranslation } from 'react-i18next';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { IconCheck, IconX } from '@/components/ui/icons';
 import {
-  getStatsForIdentity,
   getProviderTotalStats,
-  hasKeyStatsData,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import type { KeyStats } from '@/utils/usage';
 import type { ProviderResource } from '../types';
 import styles from './forms/sharedForm.module.scss';
 
 interface ResourceDetailViewProps {
   resource: ProviderResource;
   usageByProvider?: ProviderRecentUsageMap;
-  keyStats?: KeyStats;
 }
 
-export function ResourceDetailView({
-  resource,
-  usageByProvider,
-  keyStats,
-}: ResourceDetailViewProps) {
+export function ResourceDetailView({ resource, usageByProvider }: ResourceDetailViewProps) {
   const { t } = useTranslation();
 
   const primary: Array<[string, string]> = [
-    ['displayName', resource.displayName ?? t('providersPage.status.notSet')],
+    ['displayName', resource.displayName ?? t('providersPage.status.none')],
     ['identifier', resource.identifier],
     ['baseUrl', resource.baseUrl ?? t('providersPage.status.notSet')],
     ['proxyUrl', resource.proxyUrl ?? t('providersPage.status.notSet')],
@@ -52,7 +44,7 @@ export function ResourceDetailView({
     <div>
       <div className={styles.detailHeader}>
         <div className={styles.sectionTitle}>
-          {resource.name ?? resource.displayName ?? resource.identifier}
+          {resource.displayName || resource.name || resource.identifier}
         </div>
       </div>
 
@@ -72,30 +64,21 @@ export function ResourceDetailView({
           </div>
           <div className={styles.apiKeyEntryList}>
             {apiKeyEntries.map((entry, entryIndex) => {
-              const entryStats = hasKeyStatsData(keyStats)
-                ? getStatsForIdentity(
-                    { authIndex: entry.authIndex, apiKey: entry.apiKey },
-                    keyStats
+              const entryStats = usageByProvider
+                ? getProviderTotalStats(
+                    usageByProvider,
+                    openaiConfig.name,
+                    entry.apiKey,
+                    openaiConfig.baseUrl
                   )
-                : usageByProvider
-                  ? getProviderTotalStats(
-                      usageByProvider,
-                      openaiConfig.name,
-                      entry.apiKey,
-                      openaiConfig.baseUrl
-                    )
-                  : { success: 0, failure: 0 };
+                : { success: 0, failure: 0 };
               return (
                 <div
                   key={`${entry.apiKey}-${entryIndex}`}
                   className={styles.apiKeyEntryCard}
                 >
                   <span className={styles.apiKeyEntryIndex}>{entryIndex + 1}</span>
-                  <span className={styles.apiKeyEntryKey}>
-                    {entry.apiKey
-                      ? maskApiKey(entry.apiKey)
-                      : `${t('providersPage.detail.fields.authIndex')}: ${entry.authIndex}`}
-                  </span>
+                  <span className={styles.apiKeyEntryKey}>{maskApiKey(entry.apiKey)}</span>
                   {entry.proxyUrl ? (
                     <span className={styles.apiKeyEntryProxy}>{entry.proxyUrl}</span>
                   ) : null}

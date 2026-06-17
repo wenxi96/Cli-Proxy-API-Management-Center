@@ -130,6 +130,17 @@ export function IconSettings({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconPlug({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M6 8h12v4a6 6 0 0 1-12 0Z" />
+    </svg>
+  );
+}
+
 export function IconScrollText({ size = 20, ...props }: IconProps) {
   return (
     <svg {...baseSvgProps} width={size} height={size} {...props}>
@@ -178,6 +189,28 @@ export function IconTrash2({ size = 20, ...props }: IconProps) {
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
       <line x1="10" x2="10" y1="11" y2="17" />
       <line x1="14" x2="14" y1="11" y2="17" />
+    </svg>
+  );
+}
+
+export function IconMaximize2({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M15 3h6v6" />
+      <path d="m21 3-7 7" />
+      <path d="M9 21H3v-6" />
+      <path d="m3 21 7-7" />
+    </svg>
+  );
+}
+
+export function IconMinimize2({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M4 14h6v6" />
+      <path d="m10 14-7 7" />
+      <path d="M20 10h-6V4" />
+      <path d="m14 10 7-7" />
     </svg>
   );
 }
@@ -441,6 +474,29 @@ export function IconSidebarConfig({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconSidebarPlugins({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M6 8h12v4a6 6 0 0 1-12 0Z" />
+    </svg>
+  );
+}
+
+export function IconSidebarStore({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
+      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      <path d="M2 7h20" />
+      <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" />
+    </svg>
+  );
+}
+
 export function IconSidebarProviders({ size = 20, ...props }: IconProps) {
   return (
     <svg {...sidebarSvgProps} width={size} height={size} {...props}>
@@ -477,25 +533,6 @@ export function IconSidebarQuota({ size = 20, ...props }: IconProps) {
     <svg {...sidebarSvgProps} width={size} height={size} {...props}>
       <path d="m12 14 4-4" />
       <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-    </svg>
-  );
-}
-
-export function IconSidebarUsage({ size = 20, ...props }: IconProps) {
-  return (
-    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
-      <path d="M3.5 20h17" />
-      <rect x="5" y="13" width="3.5" height="7" rx="0.5" />
-      <rect
-        x="10.25"
-        y="7"
-        width="3.5"
-        height="13"
-        rx="0.5"
-        fill="currentColor"
-        fillOpacity="0.12"
-      />
-      <rect x="15.5" y="10" width="3.5" height="10" rx="0.5" />
     </svg>
   );
 }

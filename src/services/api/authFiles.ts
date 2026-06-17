@@ -10,11 +10,20 @@ import type {
   AuthFilesResponse,
 } from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
+import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
 import { parseTimestampMs } from '@/utils/timestamp';
 
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
 type AuthFileEntry = AuthFilesResponse['files'][number];
+export type AuthFileFieldsPatch = {
+  prefix?: string;
+  proxy_url?: string;
+  headers?: Record<string, string>;
+  priority?: number;
+  websockets?: boolean;
+  note?: string;
+};
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
   status?: string;
@@ -89,51 +98,19 @@ const normalizeBatchFailures = (value: unknown): AuthFileBatchFailure[] => {
   }, []);
 };
 
-const deriveSuccessfulFileNames = (
-  requestedNames: string[],
-  failed: AuthFileBatchFailure[]
-): string[] => {
-  const failedNames = new Set(failed.map((entry) => entry.name.trim()).filter(Boolean));
-
-  if (failedNames.size === 0) {
-    return [...requestedNames];
-  }
-
-  return requestedNames.filter((name) => !failedNames.has(name));
-};
-
 const normalizeBatchUploadResponse = (
   payload: AuthFileBatchUploadResponse | undefined,
   requestedNames: string[]
 ): AuthFileBatchUploadResult => {
   const failed = normalizeBatchFailures(payload?.failed);
-  const uploadedFilesFromPayload = normalizeBatchFileNames(payload?.files);
-  const uploaded =
-    typeof payload?.uploaded === 'number'
-      ? payload.uploaded
-      : uploadedFilesFromPayload.length > 0
-        ? uploadedFilesFromPayload.length
-        : requestedNames.length === 1 && failed.length === 0
-          ? 1
-          : 0;
-
-  let uploadedFiles = uploadedFilesFromPayload;
-  if (uploadedFiles.length === 0 && uploaded > 0) {
-    if (failed.length === 0 && uploaded === requestedNames.length) {
-      uploadedFiles = [...requestedNames];
-    } else {
-      const derivedNames = deriveSuccessfulFileNames(requestedNames, failed);
-      if (derivedNames.length === uploaded) {
-        uploadedFiles = derivedNames;
-      }
-    }
-  }
-
+  const filesFromPayload = normalizeBatchFileNames(payload?.files);
+  // Backend single-file success path returns only {status:"ok"} (auth_files.go:680).
+  // Derive count + names from the request when no failures and counts are absent.
+  const inferFromRequest = payload?.uploaded === undefined && failed.length === 0;
   return {
-    status:
-      typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
-    uploaded,
-    files: uploadedFiles,
+    status: payload?.status ?? (failed.length > 0 ? 'partial' : 'ok'),
+    uploaded: payload?.uploaded ?? (inferFromRequest ? requestedNames.length : 0),
+    files: filesFromPayload.length ? filesFromPayload : inferFromRequest ? [...requestedNames] : [],
     failed,
   };
 };
@@ -143,33 +120,13 @@ const normalizeBatchDeleteResponse = (
   requestedNames: string[]
 ): AuthFileBatchDeleteResult => {
   const failed = normalizeBatchFailures(payload?.failed);
-  const deletedFilesFromPayload = normalizeBatchFileNames(payload?.files);
-  const deleted =
-    typeof payload?.deleted === 'number'
-      ? payload.deleted
-      : deletedFilesFromPayload.length > 0
-        ? deletedFilesFromPayload.length
-        : requestedNames.length === 1 && failed.length === 0
-          ? 1
-          : 0;
-
-  let deletedFiles = deletedFilesFromPayload;
-  if (deletedFiles.length === 0 && deleted > 0) {
-    if (failed.length === 0 && deleted === requestedNames.length) {
-      deletedFiles = [...requestedNames];
-    } else {
-      const derivedNames = deriveSuccessfulFileNames(requestedNames, failed);
-      if (derivedNames.length === deleted) {
-        deletedFiles = derivedNames;
-      }
-    }
-  }
-
+  const filesFromPayload = normalizeBatchFileNames(payload?.files);
+  // Backend single-name delete returns only {status:"ok"} (auth_files.go:794).
+  const inferFromRequest = payload?.deleted === undefined && failed.length === 0;
   return {
-    status:
-      typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
-    deleted,
-    files: deletedFiles,
+    status: payload?.status ?? (failed.length > 0 ? 'partial' : 'ok'),
+    deleted: payload?.deleted ?? (inferFromRequest ? requestedNames.length : 0),
+    files: filesFromPayload.length ? filesFromPayload : inferFromRequest ? [...requestedNames] : [],
     failed,
   };
 };
@@ -182,126 +139,10 @@ const normalizeBatchCheckSkipped = (
   value: BatchCheckArrayPayload<AuthFilesBatchCheckResponse['skipped'][number]>
 ): AuthFilesBatchCheckResponse['skipped'] => (Array.isArray(value) ? value : []);
 
-const BATCH_CHECK_HEALTH_BUCKET_KEYS = [
-  'full',
-  'very_high',
-  'high',
-  'usable',
-  'fair',
-  'alert',
-  'danger',
-  'exhausted',
-  'unknown',
-] as const;
-
-const BATCH_CHECK_REFRESH_WINDOW_KEYS = [
-  '已到刷新时间',
-  '1小时内',
-  '1-3小时',
-  '3-6小时',
-  '6-12小时',
-  '12-24小时',
-  '1-3天',
-  '3-7天',
-  '下周及以后',
-  '未知',
-] as const;
-
-const normalizeNumberRecord = (
-  value: unknown,
-  defaults: readonly string[] = []
-): Record<string, number> => {
-  const result: Record<string, number> = {};
-  defaults.forEach((key) => {
-    result[key] = 0;
-  });
-
-  if (!value || typeof value !== 'object') {
-    return result;
-  }
-
-  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return;
-    result[key] = raw;
-  });
-
-  return result;
-};
-
-const normalizeBatchCheckAggregate = (
-  value: AuthFilesBatchCheckResponse['aggregate'] | null | undefined
-): AuthFilesBatchCheckResponse['aggregate'] => ({
-  capacity_overview: {
-    remaining_total: value?.capacity_overview?.remaining_total ?? 0,
-    total_capacity: value?.capacity_overview?.total_capacity ?? 0,
-    remaining_percent: value?.capacity_overview?.remaining_percent ?? 0,
-    used_total: value?.capacity_overview?.used_total ?? 0,
-    used_percent: value?.capacity_overview?.used_percent ?? 0,
-    equivalent_full_accounts: value?.capacity_overview?.equivalent_full_accounts ?? 0,
-    average_remaining: value?.capacity_overview?.average_remaining,
-    median_remaining: value?.capacity_overview?.median_remaining,
-    unknown_remaining_count: value?.capacity_overview?.unknown_remaining_count ?? 0,
-  },
-  risk_overview: {
-    invalidated_401_count: value?.risk_overview?.invalidated_401_count ?? 0,
-    no_quota_count: value?.risk_overview?.no_quota_count ?? 0,
-    api_error_count: value?.risk_overview?.api_error_count ?? 0,
-    request_failed_count: value?.risk_overview?.request_failed_count ?? 0,
-    exhausted_count: value?.risk_overview?.exhausted_count ?? 0,
-    low_remaining_1_29_count: value?.risk_overview?.low_remaining_1_29_count ?? 0,
-    mid_low_remaining_1_49_count: value?.risk_overview?.mid_low_remaining_1_49_count ?? 0,
-  },
-  health_buckets: normalizeNumberRecord(value?.health_buckets, BATCH_CHECK_HEALTH_BUCKET_KEYS),
-  scope_overview: {
-    total_count: value?.scope_overview?.total_count ?? 0,
-    enabled_count: value?.scope_overview?.enabled_count ?? 0,
-    disabled_count: value?.scope_overview?.disabled_count ?? 0,
-    processed_count: value?.scope_overview?.processed_count ?? 0,
-    skipped_count: value?.scope_overview?.skipped_count ?? 0,
-  },
-  refresh_overview: {
-    next_refresh_at: value?.refresh_overview?.next_refresh_at,
-    highlight_windows: Array.isArray(value?.refresh_overview?.highlight_windows)
-      ? value?.refresh_overview?.highlight_windows.filter((item) => item && typeof item.label === 'string')
-      : [],
-    refresh_window_counts: normalizeNumberRecord(
-      value?.refresh_overview?.refresh_window_counts,
-      BATCH_CHECK_REFRESH_WINDOW_KEYS
-    ),
-  },
-  plan_distribution: {
-    plan_type_counts: normalizeNumberRecord(value?.plan_distribution?.plan_type_counts),
-    primary_cycle_counts: normalizeNumberRecord(value?.plan_distribution?.primary_cycle_counts),
-    secondary_cycle_counts: normalizeNumberRecord(value?.plan_distribution?.secondary_cycle_counts),
-  },
-  diagnosis: Array.isArray(value?.diagnosis)
-    ? value.diagnosis.map((item) => ({
-        label: typeof item?.label === 'string' ? item.label : '',
-        count: typeof item?.count === 'number' && Number.isFinite(item.count) ? item.count : 0,
-        note: typeof item?.note === 'string' ? item.note : '',
-        examples: Array.isArray(item?.examples)
-          ? item.examples
-              .map((entry) => String(entry ?? '').trim())
-              .filter(Boolean)
-          : [],
-      }))
-    : [],
-  action_candidates: {
-    invalidated_401_names: normalizeBatchFileNames(value?.action_candidates?.invalidated_401_names),
-    disable_exhausted_names: normalizeBatchFileNames(value?.action_candidates?.disable_exhausted_names),
-    reenable_names: normalizeBatchFileNames(value?.action_candidates?.reenable_names),
-    reenable_threshold_bucket:
-      typeof value?.action_candidates?.reenable_threshold_bucket === 'string'
-        ? value.action_candidates.reenable_threshold_bucket
-        : 'danger',
-  },
-});
-
 const normalizeBatchCheckResponse = (
   payload: AuthFilesBatchCheckResponse
 ): AuthFilesBatchCheckResponse => ({
   ...payload,
-  aggregate: normalizeBatchCheckAggregate(payload?.aggregate),
   results: normalizeBatchCheckResults(payload?.results),
   skipped: normalizeBatchCheckSkipped(payload?.skipped),
 });
@@ -310,7 +151,6 @@ const normalizeBatchCheckJobResponse = (
   payload: AuthFileBatchCheckJobResponse
 ): AuthFileBatchCheckJobResponse => ({
   ...payload,
-  aggregate: normalizeBatchCheckAggregate(payload?.aggregate),
   results: normalizeBatchCheckResults(payload?.results),
   skipped: normalizeBatchCheckSkipped(payload?.skipped),
 });
@@ -321,7 +161,7 @@ const readTextField = (entry: AuthFileEntry, key: string): string => {
 };
 
 const readDateField = (entry: AuthFileEntry): number => {
-  const candidates = [entry['modtime'], entry.modified, entry['updated_at'], entry['last_refresh']];
+  const candidates = [entry['modtime'], entry['updated_at'], entry['last_refresh']];
 
   for (const value of candidates) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -344,12 +184,7 @@ const readDateField = (entry: AuthFileEntry): number => {
   return 0;
 };
 
-const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => {
-  const value = entry['runtime_only'] ?? entry.runtimeOnly;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
-  return false;
-};
+const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => entry['runtime_only'] === true;
 
 const hasMeaningfulValue = (value: unknown): boolean => {
   if (value == null) return false;
@@ -466,9 +301,7 @@ const normalizeOauthExcludedModels = (payload: unknown): Record<string, string[]
   const result: Record<string, string[]> = {};
 
   Object.entries(source as Record<string, unknown>).forEach(([provider, models]) => {
-    const key = String(provider ?? '')
-      .trim()
-      .toLowerCase();
+    const key = normalizeOAuthProviderKey(String(provider ?? ''));
     if (!key) return;
 
     const rawList = Array.isArray(models)
@@ -477,8 +310,8 @@ const normalizeOauthExcludedModels = (payload: unknown): Record<string, string[]
         ? models.split(/[\n,]+/)
         : [];
 
-    const seen = new Set<string>();
-    const normalized: string[] = [];
+    const normalized = result[key] ?? [];
+    const seen = new Set(normalized.map((item) => item.toLowerCase()));
     rawList.forEach((item) => {
       const trimmed = String(item ?? '').trim();
       if (!trimmed) return;
@@ -504,14 +337,13 @@ const normalizeOauthModelAlias = (payload: unknown): Record<string, OAuthModelAl
   const result: Record<string, OAuthModelAliasEntry[]> = {};
 
   Object.entries(source as Record<string, unknown>).forEach(([channel, mappings]) => {
-    const key = String(channel ?? '')
-      .trim()
-      .toLowerCase();
+    const key = normalizeOAuthProviderKey(String(channel ?? ''));
     if (!key) return;
     if (!Array.isArray(mappings)) return;
 
-    const seen = new Set<string>();
-    const normalized = mappings
+    const normalized = result[key] ?? [];
+    const seenAlias = new Set(normalized.map((entry) => entry.alias.toLowerCase()));
+    mappings
       .map((item) => {
         if (!item || typeof item !== 'object') return null;
         const entry = item as Record<string, unknown>;
@@ -522,13 +354,13 @@ const normalizeOauthModelAlias = (payload: unknown): Record<string, OAuthModelAl
         return fork ? { name, alias, fork } : { name, alias };
       })
       .filter(Boolean)
-      .filter((entry) => {
+      .forEach((entry) => {
         const aliasEntry = entry as OAuthModelAliasEntry;
-        const dedupeKey = `${aliasEntry.name.toLowerCase()}::${aliasEntry.alias.toLowerCase()}::${aliasEntry.fork ? '1' : '0'}`;
-        if (seen.has(dedupeKey)) return false;
-        seen.add(dedupeKey);
-        return true;
-      }) as OAuthModelAliasEntry[];
+        const aliasKey = aliasEntry.alias.toLowerCase();
+        if (seenAlias.has(aliasKey)) return;
+        seenAlias.add(aliasKey);
+        normalized.push(aliasEntry);
+      });
 
     if (normalized.length) {
       result[key] = normalized;
@@ -583,6 +415,9 @@ export const authFilesApi = {
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
+
+  patchFields: (name: string, fields: AuthFileFieldsPatch) =>
+    apiClient.patch('/auth-files/fields', { name, ...fields }),
 
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
@@ -654,10 +489,15 @@ export const authFilesApi = {
   },
 
   saveOauthExcludedModels: (provider: string, models: string[]) =>
-    apiClient.patch('/oauth-excluded-models', { provider, models }),
+    apiClient.patch('/oauth-excluded-models', {
+      provider: normalizeOAuthProviderKey(provider),
+      models,
+    }),
 
   deleteOauthExcludedEntry: (provider: string) =>
-    apiClient.delete(`/oauth-excluded-models?provider=${encodeURIComponent(provider)}`),
+    apiClient.delete(
+      `/oauth-excluded-models?provider=${encodeURIComponent(normalizeOAuthProviderKey(provider))}`
+    ),
 
   replaceOauthExcludedModels: (map: Record<string, string[]>) =>
     apiClient.put('/oauth-excluded-models', normalizeOauthExcludedModels(map)),
@@ -669,9 +509,7 @@ export const authFilesApi = {
   },
 
   saveOauthModelAlias: async (channel: string, aliases: OAuthModelAliasEntry[]) => {
-    const normalizedChannel = String(channel ?? '')
-      .trim()
-      .toLowerCase();
+    const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     const normalizedAliases =
       normalizeOauthModelAlias({ [normalizedChannel]: aliases })[normalizedChannel] ?? [];
     await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
@@ -681,9 +519,7 @@ export const authFilesApi = {
   },
 
   deleteOauthModelAlias: async (channel: string) => {
-    const normalizedChannel = String(channel ?? '')
-      .trim()
-      .toLowerCase();
+    const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
 
     try {
       await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
@@ -716,9 +552,7 @@ export const authFilesApi = {
   async getModelDefinitions(
     channel: string
   ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
-    const normalizedChannel = String(channel ?? '')
-      .trim()
-      .toLowerCase();
+    const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     if (!normalizedChannel) return [];
     const data = await apiClient.get<Record<string, unknown>>(
       `/model-definitions/${encodeURIComponent(normalizedChannel)}`

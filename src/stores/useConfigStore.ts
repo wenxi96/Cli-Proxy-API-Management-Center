@@ -38,7 +38,6 @@ const SECTION_KEYS: RawConfigSection[] = [
   'proxy-url',
   'request-retry',
   'quota-exceeded',
-  'usage-statistics-enabled',
   'request-log',
   'logging-to-file',
   'logs-max-total-size-mb',
@@ -47,7 +46,6 @@ const SECTION_KEYS: RawConfigSection[] = [
   'routing/strategy',
   'routing/scoped-pool',
   'api-keys',
-  'ampcode',
   'gemini-api-key',
   'codex-api-key',
   'claude-api-key',
@@ -67,8 +65,6 @@ const extractSectionValue = (config: Config | null, section?: RawConfigSection) 
       return config.requestRetry;
     case 'quota-exceeded':
       return config.quotaExceeded;
-    case 'usage-statistics-enabled':
-      return config.usageStatisticsEnabled;
     case 'request-log':
       return config.requestLog;
     case 'logging-to-file':
@@ -85,8 +81,6 @@ const extractSectionValue = (config: Config | null, section?: RawConfigSection) 
       return config.routingScopedPool;
     case 'api-keys':
       return config.apiKeys;
-    case 'ampcode':
-      return config.ampcode;
     case 'gemini-api-key':
       return config.geminiApiKeys;
     case 'codex-api-key':
@@ -205,9 +199,6 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
         case 'quota-exceeded':
           nextConfig.quotaExceeded = value as Config['quotaExceeded'];
           break;
-        case 'usage-statistics-enabled':
-          nextConfig.usageStatisticsEnabled = value as Config['usageStatisticsEnabled'];
-          break;
         case 'request-log':
           nextConfig.requestLog = value as Config['requestLog'];
           break;
@@ -231,9 +222,6 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
           break;
         case 'api-keys':
           nextConfig.apiKeys = value as Config['apiKeys'];
-          break;
-        case 'ampcode':
-          nextConfig.ampcode = value as Config['ampcode'];
           break;
         case 'gemini-api-key':
           nextConfig.geminiApiKeys = value as Config['geminiApiKeys'];
