@@ -143,6 +143,14 @@ bun run format     # Prettier
 bun run type-check # tsc --noEmit
 ```
 
+本地开发时，如果后端运行在其他端口或 WSL 地址，可在 `.env.local` 中设置 `VITE_API_BASE`：
+
+```bash
+VITE_API_BASE=http://127.0.0.1:8317
+```
+
+该配置只影响 Vite 开发服务。生产构建的 `management.html` 仍默认使用浏览器当前地址，除非在登录页手动填写自定义连接地址。
+
 ## 贡献
 
 欢迎提 Issue 与 PR。建议附上：

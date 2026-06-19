@@ -143,6 +143,14 @@ bun run format     # Prettier
 bun run type-check # tsc --noEmit
 ```
 
+For local development against a backend running on a different port or WSL address, set `VITE_API_BASE` in `.env.local`:
+
+```bash
+VITE_API_BASE=http://127.0.0.1:8317
+```
+
+This only affects the Vite dev server. Production `management.html` builds still use the current browser origin unless the login form is given a custom connection URL.
+
 ## Contributing
 
 Issues and PRs are welcome. Please include:

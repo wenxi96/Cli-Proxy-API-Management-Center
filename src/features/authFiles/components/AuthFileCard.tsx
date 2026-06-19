@@ -11,7 +11,7 @@ import {
   IconTrash2,
 } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
-import type { AuthFileItem } from '@/types';
+import type { AuthFileBatchCheckResult, AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
 import {
   normalizeRecentRequestAuthIndex,
@@ -19,7 +19,7 @@ import {
   normalizeUsageTotal,
   statusBarDataFromRecentRequests,
 } from '@/utils/recentRequests';
-import { formatFileSize } from '@/utils/format';
+import { formatDateTime, formatFileSize } from '@/utils/format';
 import {
   QUOTA_PROVIDER_TYPES,
   formatModified,
@@ -35,6 +35,7 @@ import {
 } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
+import { getScopedPoolReasonKey, getScopedPoolStateKey } from '@/utils/scopedPool';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
@@ -49,6 +50,8 @@ export type AuthFileCardProps = {
   statusUpdating: Record<string, boolean>;
   quotaFilterType: QuotaProviderType | null;
   statusBarCache: Map<string, AuthFileStatusBarData>;
+  batchCheckResult?: AuthFileBatchCheckResult | null;
+  skippedReason?: string | null;
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
@@ -63,6 +66,36 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   return provider as QuotaProviderType;
 };
 
+const humanizeToken = (value: string): string => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return '-';
+  return trimmed
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const readBooleanField = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
+};
+
+const readNumberField = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const readStringField = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
 export function AuthFileCard(props: AuthFileCardProps) {
   const { t } = useTranslation();
   const {
@@ -75,6 +108,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
     statusUpdating,
     quotaFilterType,
     statusBarCache,
+    batchCheckResult,
+    skippedReason,
     onShowModels,
     onDownload,
     onOpenPrefixProxyEditor,
@@ -99,7 +134,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
 
-  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
+  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact && !batchCheckResult;
 
   const providerCardClass =
     quotaType === 'antigravity'
@@ -143,6 +178,79 @@ export function AuthFileCard(props: AuthFileCardProps) {
       : hasStatusWarning
         ? styles.stateBadgeWarning
         : styles.stateBadgeActive;
+
+  const resolveBatchCheckLabel = (type: 'classification' | 'bucket' | 'reason', value: string) => {
+    const key = `auth_files.batch_check_${type}_${value}`;
+    const translated = t(key);
+    return translated === key ? humanizeToken(value) : translated;
+  };
+
+  const batchCheckRemainingLabel =
+    typeof batchCheckResult?.remaining_percent === 'number'
+      ? `${batchCheckResult.remaining_percent}%`
+      : t('common.not_set');
+  const batchCheckCheckedAt = batchCheckResult?.checked_at
+    ? formatDateTime(batchCheckResult.checked_at)
+    : t('common.not_set');
+  const batchCheckClassificationLabel = batchCheckResult
+    ? resolveBatchCheckLabel('classification', batchCheckResult.classification)
+    : '';
+  const batchCheckBucketLabel = batchCheckResult
+    ? resolveBatchCheckLabel('bucket', batchCheckResult.bucket)
+    : '';
+  const skippedReasonLabel = skippedReason ? resolveBatchCheckLabel('reason', skippedReason) : '';
+  const batchCheckBadgeClass =
+    batchCheckResult?.classification === 'ok'
+      ? styles.batchCheckBadgeSuccess
+      : batchCheckResult?.classification === 'no_quota'
+        ? styles.batchCheckBadgeWarning
+        : batchCheckResult
+          ? styles.batchCheckBadgeDanger
+          : styles.batchCheckBadgeMuted;
+  const poolEnabled = readBooleanField(file.poolEnabled ?? file['pool_enabled']) ?? false;
+  const poolInPool = readBooleanField(file.inPool ?? file['in_pool']) ?? false;
+  const poolState = readStringField(file.poolState ?? file['pool_state']);
+  const poolReason = readStringField(file.poolReason ?? file['pool_reason']);
+  const poolRemainingPercent = readNumberField(
+    file.poolRemainingPercent ?? file['pool_remaining_percent']
+  );
+  const poolConsecutiveErrors = readNumberField(
+    file.poolConsecutiveErrors ?? file['pool_consecutive_errors']
+  );
+  const poolPenaltyUntil = readStringField(file.poolPenaltyUntil ?? file['pool_penalty_until']);
+  const showPoolStatus = poolEnabled || poolState !== '' || poolReason !== '';
+  const poolStateKey = poolEnabled && poolState ? getScopedPoolStateKey(poolState) : 'unmanaged';
+  const poolReasonKey = getScopedPoolReasonKey(poolReason);
+  const poolStateLabel = showPoolStatus ? t(`auth_files.pool_state_${poolStateKey}`) : '';
+  const poolReasonLabel =
+    poolReasonKey !== 'none' ? t(`auth_files.pool_reason_${poolReasonKey}`) : '';
+  const visiblePoolStateLabel = file.disabled && poolStateKey === 'disabled' ? '' : poolStateLabel;
+  const visiblePoolReasonLabel =
+    file.disabled && poolReasonKey === 'disabled' ? '' : poolReasonLabel;
+  const hasVisiblePoolStatus =
+    Boolean(visiblePoolStateLabel) ||
+    Boolean(visiblePoolReasonLabel) ||
+    typeof poolRemainingPercent === 'number' ||
+    (typeof poolConsecutiveErrors === 'number' && poolConsecutiveErrors > 0) ||
+    Boolean(poolPenaltyUntil);
+  const poolPrimaryBadgeClass =
+    poolEnabled && poolInPool
+      ? styles.batchCheckBadgeSuccess
+      : poolEnabled && poolStateKey === 'standby'
+        ? styles.batchCheckBadgeOutline
+        : poolEnabled && poolStateKey === 'penalized'
+          ? styles.batchCheckBadgeWarning
+          : poolEnabled
+            ? styles.batchCheckBadgeDanger
+            : styles.batchCheckBadgeMuted;
+  const poolSecondaryBadgeClass =
+    poolReasonKey === 'healthy' || poolReasonKey === 'pool_full'
+      ? styles.batchCheckBadgeOutline
+      : poolReasonKey === 'strategy_incompatible' || poolReasonKey === 'not_enabled'
+        ? styles.batchCheckBadgeMuted
+        : poolReasonKey === 'none'
+          ? styles.batchCheckBadgeOutline
+          : styles.batchCheckBadgeWarning;
 
   return (
     <div
@@ -232,6 +340,38 @@ export function AuthFileCard(props: AuthFileCardProps) {
             </div>
           )}
 
+          {showPoolStatus && hasVisiblePoolStatus && (
+            <div className={styles.batchCheckBadgeRow}>
+              {visiblePoolStateLabel ? (
+                <span className={`${styles.batchCheckBadge} ${poolPrimaryBadgeClass}`}>
+                  {visiblePoolStateLabel}
+                </span>
+              ) : null}
+              {visiblePoolReasonLabel ? (
+                <span className={`${styles.batchCheckBadge} ${poolSecondaryBadgeClass}`}>
+                  {visiblePoolReasonLabel}
+                </span>
+              ) : null}
+              {typeof poolRemainingPercent === 'number' ? (
+                <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                  {t('auth_files.pool_remaining_percent', { value: poolRemainingPercent })}
+                </span>
+              ) : null}
+              {typeof poolConsecutiveErrors === 'number' && poolConsecutiveErrors > 0 ? (
+                <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                  {t('auth_files.pool_consecutive_errors', { count: poolConsecutiveErrors })}
+                </span>
+              ) : null}
+              {poolPenaltyUntil ? (
+                <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                  {t('auth_files.pool_penalty_until', {
+                    time: formatDateTime(poolPenaltyUntil),
+                  })}
+                </span>
+              ) : null}
+            </div>
+          )}
+
           <div className={`${styles.cardInsights} ${compact ? styles.cardInsightsCompact : ''}`}>
             <div className={`${styles.cardStats} ${compact ? styles.cardStatsCompact : ''}`}>
               <div className={`${styles.statPill} ${styles.statSuccess}`}>
@@ -250,6 +390,54 @@ export function AuthFileCard(props: AuthFileCardProps) {
               </div>
               <ProviderStatusBar statusData={statusData} styles={styles} />
             </div>
+
+            {(batchCheckResult || skippedReasonLabel) && (
+              <div className={styles.batchCheckInlineCard}>
+                <div className={styles.batchCheckInlineHeader}>
+                  <span className={styles.batchCheckInlineTitle}>
+                    {t('auth_files.batch_check_inline_title')}
+                  </span>
+                  {batchCheckResult && (
+                    <div className={styles.batchCheckInlineBadges}>
+                      <span className={`${styles.batchCheckBadge} ${batchCheckBadgeClass}`}>
+                        {batchCheckClassificationLabel}
+                      </span>
+                      <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                        {batchCheckBucketLabel}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {batchCheckResult ? (
+                  <>
+                    <div className={styles.batchCheckInlineMetrics}>
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_remaining_percent'),
+                        batchCheckRemainingLabel
+                      )}
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_checked_at'),
+                        batchCheckCheckedAt
+                      )}
+                      {renderInlineMetric(
+                        t('auth_files.batch_check_available'),
+                        batchCheckResult.available ? t('common.yes') : t('common.no')
+                      )}
+                    </div>
+                    {batchCheckResult.error_message && (
+                      <div className={styles.batchCheckInlineMessage}>
+                        {batchCheckResult.error_message}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={styles.batchCheckInlineMessage}>
+                    {t('auth_files.batch_check_skipped_inline', { reason: skippedReasonLabel })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {showQuotaLayout && quotaType && (
               <AuthFileQuotaSection
@@ -336,6 +524,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function renderInlineMetric(label: string, value: string) {
+  return (
+    <div className={styles.batchCheckInlineMetric}>
+      <span className={styles.batchCheckInlineMetricLabel}>{label}</span>
+      <span className={styles.batchCheckInlineMetricValue}>{value}</span>
     </div>
   );
 }
