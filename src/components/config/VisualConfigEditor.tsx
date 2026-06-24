@@ -641,7 +641,7 @@ export function VisualConfigEditor({
         id: 'quota',
         title: t('config_management.visual.sections.quota.title'),
         icon: IconTimer,
-        errorCount: values.quotaAutoDisableAuthFileOnZeroQuota
+        errorCount: values.quotaAutoDisableAuthFileOnLowQuota
           ? countErrors(['quotaAutoDisableAuthFileQuotaThresholdPercent'])
           : 0,
       },
@@ -668,7 +668,7 @@ export function VisualConfigEditor({
         errorCount: hasPayloadValidationErrors ? 1 : 0,
       },
     ],
-    [countErrors, hasPayloadValidationErrors, isScopedPoolFieldsVisible, t, values.quotaAutoDisableAuthFileOnZeroQuota]
+    [countErrors, hasPayloadValidationErrors, isScopedPoolFieldsVisible, t, values.quotaAutoDisableAuthFileOnLowQuota]
   );
 
   const hasValidationIssues =
@@ -1902,20 +1902,20 @@ export function VisualConfigEditor({
               <SectionGrid>
                 {quotaSwitchProjectToggle}
                 {quotaSwitchPreviewModelToggle}
-                <FieldAnchor fieldId="quotaAutoDisableAuthFile">
+                <FieldAnchor fieldId="quotaAutoDisableAuthFileOnLowQuota">
                   <ToggleRow
                     title={t('config_management.visual.sections.quota.auto_disable_auth_file')}
                     description={t(
                       'config_management.visual.sections.quota.auto_disable_auth_file_desc'
                     )}
-                    checked={values.quotaAutoDisableAuthFileOnZeroQuota}
+                    checked={values.quotaAutoDisableAuthFileOnLowQuota}
                     disabled={disabled}
-                    onChange={(quotaAutoDisableAuthFileOnZeroQuota) =>
-                      onChange({ quotaAutoDisableAuthFileOnZeroQuota })
+                    onChange={(quotaAutoDisableAuthFileOnLowQuota) =>
+                      onChange({ quotaAutoDisableAuthFileOnLowQuota })
                     }
                   />
                 </FieldAnchor>
-                {values.quotaAutoDisableAuthFileOnZeroQuota ? (
+                {values.quotaAutoDisableAuthFileOnLowQuota ? (
                   <FieldAnchor fieldId="quotaAutoDisableAuthFileQuotaThresholdPercent">
                     <FieldShell
                       label={t(

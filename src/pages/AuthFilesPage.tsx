@@ -20,6 +20,7 @@ import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer'
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { IconFilterAll, IconSearch } from '@/components/ui/icons';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -56,6 +57,7 @@ import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
+import { useAuthFilesStats } from '@/features/authFiles/hooks/useAuthFilesStats';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
   isAuthFilesSortMode,
@@ -65,8 +67,9 @@ import {
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
-import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import { useAuthStore, useConfigStore, useNotificationStore, useThemeStore } from '@/stores';
 import type { AuthFileBatchCheckAggregate, AuthFileBatchCheckSummary } from '@/types';
+import { getScopedPoolReasonKey, getScopedPoolStateKey } from '@/utils/scopedPool';
 import styles from './AuthFilesPage.module.scss';
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
@@ -142,6 +145,50 @@ const EMPTY_BATCH_CHECK_AGGREGATE: AuthFileBatchCheckAggregate = {
 };
 type BatchCheckScope = 'selected' | 'page' | 'filtered';
 type BatchCheckDirectAction = 'delete_invalidated_401' | 'disable_exhausted' | 'reenable_recovered';
+type AuthFileScopedPoolState =
+  | 'in_pool'
+  | 'standby'
+  | 'penalized'
+  | 'ejected'
+  | 'disabled'
+  | 'configured';
+type AuthFileScopedPoolEntry = {
+  name: string;
+  providerKey: string;
+  providerLabel: string;
+  state: AuthFileScopedPoolState;
+  stateLabel: string;
+  reasonKey: string;
+  reasonLabel: string;
+  remainingPercent?: number;
+  lastQuotaCheckedAt?: string;
+};
+type AuthFileScopedPoolProviderBucket = {
+  providerKey: string;
+  providerLabel: string;
+  managedCount: number;
+  activeCount: number;
+  standbyCount: number;
+  penalizedCount: number;
+  ejectedCount: number;
+  disabledCount: number;
+  entries: AuthFileScopedPoolEntry[];
+};
+type AuthFileScopedPoolSummary = {
+  totalFileCount: number;
+  managedCount: number;
+  providerCount: number;
+  activeProviderCount: number;
+  activeCount: number;
+  standbyCount: number;
+  penalizedCount: number;
+  ejectedCount: number;
+  disabledCount: number;
+  configuredCount: number;
+  effective: boolean;
+  providerBuckets: AuthFileScopedPoolProviderBucket[];
+  entriesByState: Record<AuthFileScopedPoolState, AuthFileScopedPoolEntry[]>;
+};
 
 const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -167,11 +214,42 @@ const formatBatchCheckNumber = (value?: number | null): string => {
 const clampBatchCheckConcurrency = (value: number) =>
   Math.min(MAX_BATCH_CHECK_CONCURRENCY, Math.max(MIN_BATCH_CHECK_CONCURRENCY, Math.round(value)));
 
+const readBooleanField = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
+};
+
+const readNumberField = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const readStringField = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const readDateField = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const timestamp = value > 1_000_000_000_000 ? value : value * 1000;
+    return new Date(timestamp).toISOString();
+  }
+  return undefined;
+};
+
 export function AuthFilesPage() {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const config = useConfigStore((state) => state.config);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
@@ -179,6 +257,7 @@ export function AuthFilesPage() {
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
+  const [enabledOnly, setEnabledOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
@@ -203,6 +282,7 @@ export function AuthFilesPage() {
   const [batchCheckActionPending, setBatchCheckActionPending] = useState<BatchCheckDirectAction | null>(null);
   const [reenableTieredModalOpen, setReenableTieredModalOpen] = useState(false);
   const [reenableModalSession, setReenableModalSession] = useState(0);
+  const [authFilesScopedPoolModalOpen, setAuthFilesScopedPoolModalOpen] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
@@ -291,6 +371,8 @@ export function AuthFilesPage() {
     loadFiles,
   });
 
+  const { refreshKeyStats } = useAuthFilesStats();
+
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
   const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
@@ -313,6 +395,9 @@ export function AuthFilesPage() {
       }
       if (typeof persisted.problemOnly === 'boolean') {
         setProblemOnly(persisted.problemOnly);
+      }
+      if (typeof persisted.enabledOnly === 'boolean') {
+        setEnabledOnly(persisted.enabledOnly);
       }
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
@@ -362,6 +447,7 @@ export function AuthFilesPage() {
     writeAuthFilesUiState({
       filter,
       problemOnly,
+      enabledOnly,
       disabledOnly,
       compactMode,
       search,
@@ -376,6 +462,7 @@ export function AuthFilesPage() {
   }, [
     batchCheckConcurrency,
     compactMode,
+    enabledOnly,
     disabledOnly,
     filter,
     page,
@@ -450,8 +537,8 @@ export function AuthFilesPage() {
   );
 
   const handleHeaderRefresh = useCallback(async () => {
-    await Promise.all([loadFiles(), loadExcluded(), loadModelAlias()]);
-  }, [loadFiles, loadExcluded, loadModelAlias]);
+    await Promise.all([loadFiles(), loadExcluded(), loadModelAlias(), refreshKeyStats()]);
+  }, [loadFiles, loadExcluded, loadModelAlias, refreshKeyStats]);
 
   useHeaderRefresh(handleHeaderRefresh);
 
@@ -460,11 +547,19 @@ export function AuthFilesPage() {
     loadFiles();
     loadExcluded();
     loadModelAlias();
-  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelAlias]);
+    refreshKeyStats();
+  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelAlias, refreshKeyStats]);
 
   useInterval(
     () => {
       void loadFiles().catch(() => {});
+    },
+    isCurrentLayer ? 240_000 : null
+  );
+
+  useInterval(
+    () => {
+      void refreshKeyStats().catch(() => {});
     },
     isCurrentLayer ? 240_000 : null
   );
@@ -482,10 +577,11 @@ export function AuthFilesPage() {
     () =>
       files.filter((file) => {
         if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
+        if (enabledOnly && file.disabled === true) return false;
         if (disabledOnly && file.disabled !== true) return false;
         return true;
       }),
-    [disabledOnly, files, problemOnly]
+    [disabledOnly, enabledOnly, files, problemOnly]
   );
 
   const sortOptions = useMemo(
@@ -506,6 +602,240 @@ export function AuthFilesPage() {
     });
     return counts;
   }, [filesMatchingStatusFilters]);
+
+  const authFilesScopedPoolSummary = useMemo<AuthFileScopedPoolSummary | null>(() => {
+    const entriesByState: Record<AuthFileScopedPoolState, AuthFileScopedPoolEntry[]> = {
+      in_pool: [],
+      standby: [],
+      penalized: [],
+      ejected: [],
+      disabled: [],
+      configured: [],
+    };
+    const providerMap = new Map<string, AuthFileScopedPoolProviderBucket>();
+    let totalFileCount = 0;
+
+    files.forEach((file) => {
+      if (isRuntimeOnlyAuthFile(file)) return;
+      totalFileCount += 1;
+
+      const poolConfigured = readBooleanField(file.poolConfigured ?? file['pool_configured']) ?? false;
+      const poolEnabled = readBooleanField(file.poolEnabled ?? file['pool_enabled']) ?? false;
+      const poolState = readStringField(file.poolState ?? file['pool_state']);
+      const poolReason = readStringField(file.poolReason ?? file['pool_reason']);
+      const remainingPercent = readNumberField(
+        file.poolRemainingPercent ?? file['pool_remaining_percent']
+      );
+      const lastQuotaCheckedAt = readDateField(
+        file.poolLastQuotaCheckedAt ?? file['pool_last_quota_checked_at']
+      );
+      const managed = poolConfigured || poolEnabled || poolState !== '' || poolReason !== '';
+      if (!managed) return;
+
+      const providerKey =
+        normalizeProviderKey(String(file.provider ?? file.type ?? 'unknown')) || 'unknown';
+      const providerLabel = getTypeLabel(t, providerKey);
+      const derivedStateKey = file.disabled
+        ? 'disabled'
+        : poolState
+          ? getScopedPoolStateKey(poolState)
+          : poolConfigured
+            ? 'configured'
+            : 'configured';
+      const state: AuthFileScopedPoolState =
+        derivedStateKey === 'in_pool' ||
+        derivedStateKey === 'standby' ||
+        derivedStateKey === 'penalized' ||
+        derivedStateKey === 'ejected' ||
+        derivedStateKey === 'disabled'
+          ? derivedStateKey
+          : 'configured';
+      const reasonKey = getScopedPoolReasonKey(poolReason);
+      const entry: AuthFileScopedPoolEntry = {
+        name: file.name,
+        providerKey,
+        providerLabel,
+        state,
+        stateLabel: t(`auth_files.pool_state_${state}`),
+        reasonKey,
+        reasonLabel: reasonKey !== 'none' ? t(`auth_files.pool_reason_${reasonKey}`) : '',
+        remainingPercent,
+        lastQuotaCheckedAt,
+      };
+
+      entriesByState[state].push(entry);
+
+      if (!providerMap.has(providerKey)) {
+        providerMap.set(providerKey, {
+          providerKey,
+          providerLabel,
+          managedCount: 0,
+          activeCount: 0,
+          standbyCount: 0,
+          penalizedCount: 0,
+          ejectedCount: 0,
+          disabledCount: 0,
+          entries: [],
+        });
+      }
+
+      const providerBucket = providerMap.get(providerKey)!;
+      providerBucket.managedCount += 1;
+      providerBucket.entries.push(entry);
+      if (state === 'in_pool') providerBucket.activeCount += 1;
+      if (state === 'standby') providerBucket.standbyCount += 1;
+      if (state === 'penalized') providerBucket.penalizedCount += 1;
+      if (state === 'ejected') providerBucket.ejectedCount += 1;
+      if (state === 'disabled') providerBucket.disabledCount += 1;
+    });
+
+    const sortEntries = (items: AuthFileScopedPoolEntry[]) =>
+      [...items].sort((left, right) => {
+        const providerCompare = left.providerLabel.localeCompare(right.providerLabel, undefined, {
+          sensitivity: 'base',
+        });
+        if (providerCompare !== 0) return providerCompare;
+        return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+      });
+
+    const providerBuckets = Array.from(providerMap.values())
+      .map((bucket) => ({
+        ...bucket,
+        entries: sortEntries(bucket.entries),
+      }))
+      .sort((left, right) => {
+        if (right.activeCount !== left.activeCount) return right.activeCount - left.activeCount;
+        if (right.managedCount !== left.managedCount) return right.managedCount - left.managedCount;
+        return left.providerLabel.localeCompare(right.providerLabel, undefined, {
+          sensitivity: 'base',
+        });
+      });
+
+    const activeCount = entriesByState.in_pool.length;
+    const standbyCount = entriesByState.standby.length;
+    const penalizedCount = entriesByState.penalized.length;
+    const ejectedCount = entriesByState.ejected.length;
+    const disabledCount = entriesByState.disabled.length;
+    const configuredCount = entriesByState.configured.length;
+    const managedCount =
+      activeCount + standbyCount + penalizedCount + ejectedCount + disabledCount + configuredCount;
+
+    if (managedCount === 0) return null;
+
+    return {
+      totalFileCount,
+      managedCount,
+      providerCount: providerBuckets.length,
+      activeProviderCount: providerBuckets.filter((bucket) => bucket.activeCount > 0).length,
+      activeCount,
+      standbyCount,
+      penalizedCount,
+      ejectedCount,
+      disabledCount,
+      configuredCount,
+      effective: activeCount + standbyCount + penalizedCount + ejectedCount + disabledCount > 0,
+      providerBuckets,
+      entriesByState: {
+        in_pool: sortEntries(entriesByState.in_pool),
+        standby: sortEntries(entriesByState.standby),
+        penalized: sortEntries(entriesByState.penalized),
+        ejected: sortEntries(entriesByState.ejected),
+        disabled: sortEntries(entriesByState.disabled),
+        configured: sortEntries(entriesByState.configured),
+      },
+    };
+  }, [files, t]);
+
+  const authFilesScopedPoolMetrics = useMemo(() => {
+    if (!authFilesScopedPoolSummary) return [];
+
+    return [
+      {
+        key: 'in_pool',
+        label: t('auth_files.scoped_pool_auth_active_count'),
+        value: formatNumber(authFilesScopedPoolSummary.activeCount),
+      },
+      {
+        key: 'standby',
+        label: t('auth_files.scoped_pool_auth_standby_count'),
+        value: formatNumber(authFilesScopedPoolSummary.standbyCount),
+      },
+      {
+        key: 'penalized',
+        label: t('auth_files.scoped_pool_auth_penalized_count'),
+        value: formatNumber(authFilesScopedPoolSummary.penalizedCount),
+      },
+      {
+        key: 'ejected',
+        label: t('auth_files.scoped_pool_auth_ejected_count'),
+        value: formatNumber(authFilesScopedPoolSummary.ejectedCount),
+      },
+      {
+        key: 'disabled',
+        label: t('auth_files.scoped_pool_auth_disabled_count'),
+        value: formatNumber(authFilesScopedPoolSummary.disabledCount),
+      },
+      {
+        key: 'managed',
+        label: t('auth_files.scoped_pool_auth_managed_count'),
+        value: formatNumber(authFilesScopedPoolSummary.managedCount),
+      },
+      {
+        key: 'providers',
+        label: t('auth_files.scoped_pool_auth_provider_count'),
+        value: formatNumber(authFilesScopedPoolSummary.providerCount),
+        hint: t('auth_files.scoped_pool_auth_provider_count_hint', {
+          count: authFilesScopedPoolSummary.activeProviderCount,
+        }),
+      },
+    ];
+  }, [authFilesScopedPoolSummary, t]);
+
+  const activeAuthFilesScopedPoolProviderBuckets = useMemo(
+    () =>
+      authFilesScopedPoolSummary
+        ? authFilesScopedPoolSummary.providerBuckets.filter((bucket) => bucket.activeCount > 0)
+        : [],
+    [authFilesScopedPoolSummary]
+  );
+
+  const isScopedPoolRoutingActive = config?.routingStrategy?.trim() === 'round-robin';
+  const showAuthFilesScopedPoolSummary =
+    isScopedPoolRoutingActive && Boolean(authFilesScopedPoolSummary?.effective);
+  const visibleAuthFilesScopedPoolSummary = showAuthFilesScopedPoolSummary
+    ? authFilesScopedPoolSummary
+    : null;
+
+  const authFilesScopedPoolSections = useMemo(() => {
+    if (!authFilesScopedPoolSummary) return [];
+
+    return [
+      {
+        key: 'in_pool',
+        label: t('auth_files.pool_state_in_pool'),
+        description: t('auth_files.scoped_pool_auth_detail_in_pool_desc'),
+        entries: authFilesScopedPoolSummary.entriesByState.in_pool,
+      },
+      {
+        key: 'penalized',
+        label: t('auth_files.pool_state_penalized'),
+        description: t('auth_files.scoped_pool_auth_detail_penalized_desc'),
+        entries: authFilesScopedPoolSummary.entriesByState.penalized,
+      },
+      {
+        key: 'ejected',
+        label: t('auth_files.pool_state_ejected'),
+        description: t('auth_files.scoped_pool_auth_detail_ejected_desc'),
+        entries: authFilesScopedPoolSummary.entriesByState.ejected,
+      },
+    ].filter((section) => section.entries.length > 0);
+  }, [authFilesScopedPoolSummary, t]);
+
+  useEffect(() => {
+    if (!showAuthFilesScopedPoolSummary && authFilesScopedPoolModalOpen) {
+      setAuthFilesScopedPoolModalOpen(false);
+    }
+  }, [authFilesScopedPoolModalOpen, showAuthFilesScopedPoolSummary]);
 
   const normalizedSearch = search.trim();
   const wildcardSearch = useMemo(() => buildWildcardSearch(normalizedSearch), [normalizedSearch]);
@@ -798,6 +1128,14 @@ export function AuthFilesPage() {
   const handleCloseBatchCheckDetails = useCallback(() => {
     setBatchCheckModalOpen(false);
     setBatchCheckFocusName('');
+  }, []);
+
+  const handleOpenAuthFilesScopedPoolDetails = useCallback(() => {
+    setAuthFilesScopedPoolModalOpen(true);
+  }, []);
+
+  const handleCloseAuthFilesScopedPoolDetails = useCallback(() => {
+    setAuthFilesScopedPoolModalOpen(false);
   }, []);
 
   const handleBatchCheckSummaryAction = useCallback(
@@ -1320,6 +1658,64 @@ export function AuthFilesPage() {
           ) : null}
         </div>
 
+        {visibleAuthFilesScopedPoolSummary ? (
+          <div className={styles.scopedPoolAuthSummaryRow}>
+            <div className={styles.scopedPoolAuthSummaryMeta}>
+              <span
+                className={`${styles.batchCheckBadge} ${
+                  visibleAuthFilesScopedPoolSummary.effective
+                    ? styles.batchCheckBadgeSuccess
+                    : styles.batchCheckBadgeMuted
+                }`}
+              >
+                {visibleAuthFilesScopedPoolSummary.effective
+                  ? t('auth_files.scoped_pool_auth_effective')
+                  : t('auth_files.scoped_pool_auth_configured')}
+              </span>
+              <span className={styles.scopedPoolAuthSummaryHint}>
+                {t('auth_files.scoped_pool_auth_total_files', {
+                  count: visibleAuthFilesScopedPoolSummary.totalFileCount,
+                })}
+              </span>
+              <span className={styles.scopedPoolAuthSummaryHint}>
+                {t('auth_files.scoped_pool_auth_managed_files', {
+                  count: visibleAuthFilesScopedPoolSummary.managedCount,
+                })}
+              </span>
+              {visibleAuthFilesScopedPoolSummary.configuredCount > 0 ? (
+                <span className={styles.scopedPoolAuthSummaryHint}>
+                  {t('auth_files.scoped_pool_auth_configured_only', {
+                    count: visibleAuthFilesScopedPoolSummary.configuredCount,
+                  })}
+                </span>
+              ) : null}
+              <span className={styles.scopedPoolAuthSummaryHint}>
+                {t('auth_files.scoped_pool_auth_inline_counts', {
+                  active: visibleAuthFilesScopedPoolSummary.activeCount,
+                  standby: visibleAuthFilesScopedPoolSummary.standbyCount,
+                  penalized: visibleAuthFilesScopedPoolSummary.penalizedCount,
+                  ejected: visibleAuthFilesScopedPoolSummary.ejectedCount,
+                  disabled: visibleAuthFilesScopedPoolSummary.disabledCount,
+                })}
+              </span>
+              <span className={styles.scopedPoolAuthSummaryHint}>
+                {t('auth_files.scoped_pool_auth_inline_categories', {
+                  total: visibleAuthFilesScopedPoolSummary.providerCount,
+                  active: visibleAuthFilesScopedPoolSummary.activeProviderCount,
+                })}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.scopedPoolAuthSummaryButton}
+              onClick={handleOpenAuthFilesScopedPoolDetails}
+            >
+              {t('auth_files.scoped_pool_auth_view_details')}
+            </Button>
+          </div>
+        ) : null}
+
         <div className={styles.filterSection}>
           {renderFilterTags()}
 
@@ -1382,6 +1778,21 @@ export function AuthFilesPage() {
                         label={
                           <span className={styles.filterToggleLabel}>
                             {t('auth_files.problem_filter_only')}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className={styles.filterToggleCard}>
+                      <ToggleSwitch
+                        checked={enabledOnly}
+                        onChange={(value) => {
+                          setEnabledOnly(value);
+                          setPage(1);
+                        }}
+                        ariaLabel={t('auth_files.enabled_filter_only')}
+                        label={
+                          <span className={styles.filterToggleLabel}>
+                            {t('auth_files.enabled_filter_only')}
                           </span>
                         }
                       />
@@ -1539,6 +1950,202 @@ export function AuthFilesPage() {
         onClose={handleReenableTieredClose}
         loading={batchCheckActionPending === 'reenable_recovered'}
       />
+
+      <Modal
+        open={showAuthFilesScopedPoolSummary && authFilesScopedPoolModalOpen}
+        onClose={handleCloseAuthFilesScopedPoolDetails}
+        title={t('auth_files.scoped_pool_auth_modal_title')}
+        width={980}
+        className={styles.batchCheckModal}
+        footer={
+          <Button variant="secondary" onClick={handleCloseAuthFilesScopedPoolDetails}>
+            {t('common.close')}
+          </Button>
+        }
+      >
+        {visibleAuthFilesScopedPoolSummary ? (
+          <div className={styles.scopedPoolAuthModalContent}>
+            <div className={styles.batchCheckHeroGrid}>
+              {authFilesScopedPoolMetrics.map((item) => (
+                <div key={item.key} className={styles.batchCheckHeroCard}>
+                  <span className={styles.batchCheckHeroLabel}>{item.label}</span>
+                  <strong className={styles.batchCheckHeroValue}>{item.value}</strong>
+                  {item.hint ? <span className={styles.batchCheckHeroHint}>{item.hint}</span> : null}
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.batchCheckDetailModalGroup}>
+              <div className={styles.batchCheckDetailModalHeader}>
+                <div className={styles.batchCheckSectionTitleWrap}>
+                  <span className={styles.batchCheckSectionTitle}>
+                    {t('auth_files.scoped_pool_auth_provider_section_title')}
+                  </span>
+                  <span className={styles.batchCheckSectionDescription}>
+                    {t('auth_files.scoped_pool_auth_provider_section_desc')}
+                  </span>
+                </div>
+                <span className={styles.batchCheckDetailModalCount}>
+                  {t('auth_files.scoped_pool_auth_provider_count_badge', {
+                    count: activeAuthFilesScopedPoolProviderBuckets.length,
+                  })}
+                </span>
+              </div>
+              {activeAuthFilesScopedPoolProviderBuckets.length > 0 ? (
+                <div className={styles.scopedPoolAuthProviderGrid}>
+                  {activeAuthFilesScopedPoolProviderBuckets.map((bucket) => (
+                    <div key={bucket.providerKey} className={styles.scopedPoolAuthProviderCard}>
+                      <div className={styles.scopedPoolAuthProviderHeader}>
+                        <div className={styles.batchCheckSectionTitleWrap}>
+                          <span className={styles.batchCheckSectionTitle}>{bucket.providerLabel}</span>
+                          <span className={styles.batchCheckSectionDescription}>
+                            {t('auth_files.scoped_pool_auth_managed_files', {
+                              count: bucket.managedCount,
+                            })}
+                          </span>
+                        </div>
+                        <span className={styles.batchCheckDetailModalCount}>
+                          {t('auth_files.scoped_pool_auth_provider_active_badge', {
+                            count: bucket.activeCount,
+                          })}
+                        </span>
+                      </div>
+                      <div className={styles.batchCheckBadgeRow}>
+                        <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeSuccess}`}>
+                          {t('auth_files.scoped_pool_auth_active_count')}: {bucket.activeCount}
+                        </span>
+                        <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                          {t('auth_files.scoped_pool_auth_standby_count')}: {bucket.standbyCount}
+                        </span>
+                        {bucket.penalizedCount > 0 ? (
+                          <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeWarning}`}>
+                            {t('auth_files.scoped_pool_auth_penalized_count')}: {bucket.penalizedCount}
+                          </span>
+                        ) : null}
+                        {bucket.ejectedCount > 0 ? (
+                          <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeDanger}`}>
+                            {t('auth_files.scoped_pool_auth_ejected_count')}: {bucket.ejectedCount}
+                          </span>
+                        ) : null}
+                        {bucket.disabledCount > 0 ? (
+                          <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeMuted}`}>
+                            {t('auth_files.scoped_pool_auth_disabled_count')}: {bucket.disabledCount}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={styles.scopedPoolAuthProviderNames}>
+                        {bucket.activeCount > 0
+                          ? t('auth_files.scoped_pool_auth_provider_active_names', {
+                              names: bucket.entries
+                                .filter((entry) => entry.state === 'in_pool')
+                                .map((entry) => entry.name)
+                                .join('、'),
+                            })
+                          : t('auth_files.scoped_pool_auth_provider_no_active_names')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={styles.emptyState}>
+                  {t('auth_files.scoped_pool_auth_provider_no_active_categories')}
+                </div>
+              )}
+            </div>
+
+            {authFilesScopedPoolSections.map((section) => (
+              <div key={section.key} className={styles.batchCheckDetailModalGroup}>
+                <div className={styles.batchCheckDetailModalHeader}>
+                  <div className={styles.batchCheckSectionTitleWrap}>
+                    <span className={styles.batchCheckSectionTitle}>{section.label}</span>
+                    <span className={styles.batchCheckSectionDescription}>{section.description}</span>
+                  </div>
+                  <span className={styles.batchCheckDetailModalCount}>
+                    {t('auth_files.scoped_pool_auth_section_count_badge', {
+                      count: section.entries.length,
+                    })}
+                  </span>
+                </div>
+                <div className={styles.batchCheckDetailEntryList}>
+                  {section.entries.map((entry) => (
+                    <div key={`${section.key}-${entry.name}`} className={styles.batchCheckDetailEntry}>
+                      <div className={styles.batchCheckDetailEntryHeader}>
+                        <div className={styles.batchCheckDetailEntryTitleWrap}>
+                          <span className={styles.batchCheckDetailEntryName}>{entry.name}</span>
+                          <span className={styles.batchCheckDetailEntrySubtitle}>
+                            {entry.providerLabel}
+                          </span>
+                        </div>
+                        <div className={styles.batchCheckBadgeRow}>
+                          <span
+                            className={`${styles.batchCheckBadge} ${
+                              entry.state === 'in_pool'
+                                ? styles.batchCheckBadgeSuccess
+                                : entry.state === 'standby' || entry.state === 'configured'
+                                  ? styles.batchCheckBadgeOutline
+                                  : entry.state === 'penalized'
+                                    ? styles.batchCheckBadgeWarning
+                                    : entry.state === 'ejected'
+                                      ? styles.batchCheckBadgeDanger
+                                      : styles.batchCheckBadgeMuted
+                            }`}
+                          >
+                            {entry.stateLabel}
+                          </span>
+                          {entry.reasonLabel ? (
+                            <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeOutline}`}>
+                              {entry.reasonLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className={styles.batchCheckDetailFacts}>
+                        <div className={styles.batchCheckDetailFact}>
+                          <span className={styles.batchCheckMetricLabel}>
+                            {t('auth_files.scoped_pool_auth_detail_provider_label')}
+                          </span>
+                          <span className={styles.batchCheckMetricValue}>{entry.providerLabel}</span>
+                        </div>
+                        <div className={styles.batchCheckDetailFact}>
+                          <span className={styles.batchCheckMetricLabel}>
+                            {t('auth_files.scoped_pool_auth_detail_state_label')}
+                          </span>
+                          <span className={styles.batchCheckMetricValue}>{entry.stateLabel}</span>
+                        </div>
+                        <div className={styles.batchCheckDetailFact}>
+                          <span className={styles.batchCheckMetricLabel}>
+                            {t('auth_files.scoped_pool_auth_detail_remaining_label')}
+                          </span>
+                          <span className={styles.batchCheckMetricValue}>
+                            {typeof entry.remainingPercent === 'number'
+                              ? formatBatchCheckPercent(entry.remainingPercent)
+                              : t('common.not_set')}
+                          </span>
+                        </div>
+                        <div className={styles.batchCheckDetailFact}>
+                          <span className={styles.batchCheckMetricLabel}>
+                            {t('auth_files.scoped_pool_auth_detail_last_quota_checked_label')}
+                          </span>
+                          <span className={styles.batchCheckMetricValue}>
+                            {entry.lastQuotaCheckedAt
+                              ? formatDateTime(entry.lastQuotaCheckedAt)
+                              : t('common.not_set')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title={t('auth_files.scoped_pool_auth_empty_title')}
+            description={t('auth_files.scoped_pool_auth_empty_desc')}
+          />
+        )}
+      </Modal>
 
       <AuthFilesPrefixProxyEditorModal
         disableControls={disableControls}

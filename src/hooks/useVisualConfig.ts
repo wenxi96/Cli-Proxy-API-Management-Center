@@ -234,7 +234,7 @@ export function getVisualConfigValidationErrors(
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
     authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
-    quotaAutoDisableAuthFileQuotaThresholdPercent: values.quotaAutoDisableAuthFileOnZeroQuota
+    quotaAutoDisableAuthFileQuotaThresholdPercent: values.quotaAutoDisableAuthFileOnLowQuota
       ? getQuotaThresholdPercentError(values.quotaAutoDisableAuthFileQuotaThresholdPercent)
       : undefined,
     routingScopedPoolDefaultsLimit: shouldValidateScopedPool
@@ -962,7 +962,7 @@ function getNextDirtyFields(
       'wsAuth',
       'quotaSwitchProject',
       'quotaSwitchPreviewModel',
-      'quotaAutoDisableAuthFileOnZeroQuota',
+      'quotaAutoDisableAuthFileOnLowQuota',
       'quotaAutoDisableAuthFileQuotaThresholdPercent',
       'quotaAntigravityCredits',
       'routingStrategy',
@@ -1226,8 +1226,10 @@ export function useVisualConfig() {
 
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
-        quotaAutoDisableAuthFileOnZeroQuota: Boolean(
-          quotaExceeded?.['auto-disable-auth-file-on-zero-quota'] ??
+        quotaAutoDisableAuthFileOnLowQuota: Boolean(
+          quotaExceeded?.['auto-disable-auth-file-on-low-quota'] ??
+            quotaExceeded?.autoDisableAuthFileOnLowQuota ??
+            quotaExceeded?.['auto-disable-auth-file-on-zero-quota'] ??
             quotaExceeded?.autoDisableAuthFileOnZeroQuota
         ),
         quotaAutoDisableAuthFileQuotaThresholdPercent: String(
@@ -1513,7 +1515,7 @@ export function useVisualConfig() {
           docHas(doc, ['quota-exceeded']) ||
           !values.quotaSwitchProject ||
           !values.quotaSwitchPreviewModel ||
-          values.quotaAutoDisableAuthFileOnZeroQuota ||
+          values.quotaAutoDisableAuthFileOnLowQuota ||
           shouldWriteManagedField(
             doc,
             ['quota-exceeded', 'auto-disable-auth-file-quota-threshold-percent'],
@@ -1538,9 +1540,12 @@ export function useVisualConfig() {
           doc.setIn(['quota-exceeded', 'switch-preview-model'], values.quotaSwitchPreviewModel);
           setBooleanInDoc(
             doc,
-            ['quota-exceeded', 'auto-disable-auth-file-on-zero-quota'],
-            values.quotaAutoDisableAuthFileOnZeroQuota
+            ['quota-exceeded', 'auto-disable-auth-file-on-low-quota'],
+            values.quotaAutoDisableAuthFileOnLowQuota
           );
+          if (docHas(doc, ['quota-exceeded', 'auto-disable-auth-file-on-zero-quota'])) {
+            doc.deleteIn(['quota-exceeded', 'auto-disable-auth-file-on-zero-quota']);
+          }
           if (
             shouldWriteManagedField(
               doc,

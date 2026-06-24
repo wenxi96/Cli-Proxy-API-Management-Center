@@ -134,7 +134,7 @@ export type VisualConfigValues = {
   authAutoRefreshWorkers: string;
   quotaSwitchProject: boolean;
   quotaSwitchPreviewModel: boolean;
-  quotaAutoDisableAuthFileOnZeroQuota: boolean;
+  quotaAutoDisableAuthFileOnLowQuota: boolean;
   quotaAutoDisableAuthFileQuotaThresholdPercent: string;
   quotaAntigravityCredits: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
@@ -208,7 +208,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   authAutoRefreshWorkers: '',
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
-  quotaAutoDisableAuthFileOnZeroQuota: false,
+  quotaAutoDisableAuthFileOnLowQuota: false,
   quotaAutoDisableAuthFileQuotaThresholdPercent: '0',
   quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',

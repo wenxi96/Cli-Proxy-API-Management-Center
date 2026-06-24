@@ -8,7 +8,7 @@ import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '.
 export interface QuotaExceededConfig {
   switchProject?: boolean;
   switchPreviewModel?: boolean;
-  autoDisableAuthFileOnZeroQuota?: boolean;
+  autoDisableAuthFileOnLowQuota?: boolean;
   autoDisableAuthFileQuotaThresholdPercent?: number;
   antigravityCredits?: boolean;
 }

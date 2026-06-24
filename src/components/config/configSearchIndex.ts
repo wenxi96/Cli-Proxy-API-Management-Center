@@ -339,12 +339,12 @@ export const CONFIG_FIELD_SEARCH_INDEX: ConfigFieldSearchEntry[] = [
     yamlKeys: ['quota-exceeded', 'switch-preview-model'],
   },
   {
-    fieldId: 'quotaAutoDisableAuthFile',
+    fieldId: 'quotaAutoDisableAuthFileOnLowQuota',
     sectionId: 'quota',
     labelKey: L('sections.quota.auto_disable_auth_file'),
     hintKey: L('sections.quota.auto_disable_auth_file_desc'),
-    yamlKeys: ['quota-exceeded', 'auto-disable-auth-file-on-zero-quota'],
-    keywords: ['auto disable', 'auth file', 'zero quota'],
+    yamlKeys: ['quota-exceeded', 'auto-disable-auth-file-on-low-quota'],
+    keywords: ['auto disable', 'auth file', 'low quota'],
   },
   {
     fieldId: 'quotaAutoDisableAuthFileQuotaThresholdPercent',

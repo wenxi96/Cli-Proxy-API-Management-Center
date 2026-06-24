@@ -4,12 +4,12 @@
 
 - Plan Path: `.agents/tasks/20260527-sync-upstream/plans/2026-05-28-sync-upstream-implementation-plan.md`
 - Execution Route: direct_inline
-- Current Task: 8 合回 master/dev（本地，不推送）
-- Task Status: not_started
+- Current Task: historical predecessor; superseded by `20260612-sync-upstream-v7-fork-customizations`
+- Task Status: superseded_reference
 - Last Verification: pass
-- Current Stop Condition: waiting_user
-- Next Step: 等待用户明确授权后执行任务 8；任务 9 推送 origin 需再次明确授权
-- Updated At: 2026-06-03 09:32 HKT
+- Current Stop Condition: superseded_by_cross_repository_task
+- Next Step: 不从本任务继续执行；当前 canonical plan 见后端 `.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`
+- Updated At: 2026-06-22 HKT
 
 ### 2026-05-27 17:00 任务规划完成
 
@@ -115,3 +115,11 @@
 - Verification: `npm run type-check`; `npm run lint`; `npm run build`; `git diff --check`; `git check-ignore -v .playwright-mcp/page-2026-06-01T08-41-24-287Z.yml .agents/scratch/foo.tmp .agents/workers/foo.tmp`
 - Result: 实现候选已整理为暂存状态；`.playwright-mcp/` 作为本机浏览器验证快照被排除；任务 1-7 保持已验证，任务 8/9 仍等待授权
 - Next: 用户授权后执行任务 8 合回本地 `master/dev`；任务 9 推送远端需单独授权
+
+### 2026-06-22 HKT 标记为历史 predecessor
+
+- Action: 根据当前联合任务审核，将本任务从待执行状态改为历史 predecessor/reference；当前 canonical plan 改由后端仓库 `20260612-sync-upstream-v7-fork-customizations` 承载。
+- Files: `.agents/tasks/20260527-sync-upstream/progress.md`; `.agents/tasks/20260527-sync-upstream/handoff.md`; `.agents/tasks/20260527-sync-upstream/findings.md`; `.agents/README.md`; `.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`
+- Verification: `.agents` git 可见性检查通过；新 `20260612-sync-upstream-v7-fork-customizations` 引用任务可见，scratch/workers 仍被 ignore。
+- Result: 顶部状态不再提示继续任务 8；旧任务保留为历史证据和 commit-scope 参考。
+- Next: 后续执行以前端新引用任务和后端 canonical plan 为入口。
