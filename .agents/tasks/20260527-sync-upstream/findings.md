@@ -61,3 +61,10 @@ a4d1c23 cc8632b 8ed837c b25f722 7d3c570 632be0b 011cd3b
 ```
 
 这些 commit 本次复核结论均为 `continue_skip`，不得通过普通 merge 间接吸收。
+
+## 2026-06-22 superseded 说明
+
+- 本任务基线为 `upstream/main@87702bb`，当前只作为 `20260612-sync-upstream-v7-fork-customizations` 的 predecessor/reference。
+- 当前前后端联合同步 canonical plan 位于后端仓库 `/home/cheng/git-project/CLIProxyAPI/.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`。
+- `b25f722`（provider usage tracking）与 `632be0b`（remove unused chart configuration）的 `continue_skip` 决策基于旧 provider / usage 架构，仍可作为“不要通过普通 merge 间接吸收旧大范围变更”的历史证据。
+- 当前 `v1.16.7` 吸收工作保留 fork Usage 页面并适配新布局，不等同于直接回放旧 `b25f722` / `632be0b`。

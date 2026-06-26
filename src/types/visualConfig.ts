@@ -134,7 +134,7 @@ export type VisualConfigValues = {
   authAutoRefreshWorkers: string;
   quotaSwitchProject: boolean;
   quotaSwitchPreviewModel: boolean;
-  quotaAutoDisableAuthFileOnZeroQuota: boolean;
+  quotaAutoDisableAuthFileOnLowQuota: boolean;
   quotaAutoDisableAuthFileQuotaThresholdPercent: string;
   quotaAntigravityCredits: boolean;
   routingStrategy: 'round-robin' | 'fill-first';
@@ -149,7 +149,6 @@ export type VisualConfigValues = {
   routingSessionAffinity: boolean;
   routingSessionAffinityTTL: string;
   wsAuth: boolean;
-  enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
   antigravitySignatureBypassStrict: boolean;
   claudeHeaderUserAgent: string;
@@ -209,7 +208,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   authAutoRefreshWorkers: '',
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
-  quotaAutoDisableAuthFileOnZeroQuota: false,
+  quotaAutoDisableAuthFileOnLowQuota: false,
   quotaAutoDisableAuthFileQuotaThresholdPercent: '0',
   quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',
@@ -224,7 +223,6 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   routingSessionAffinity: false,
   routingSessionAffinityTTL: '',
   wsAuth: false,
-  enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
   antigravitySignatureBypassStrict: false,
   claudeHeaderUserAgent: '',

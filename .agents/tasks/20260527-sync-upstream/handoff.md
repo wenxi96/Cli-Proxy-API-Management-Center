@@ -2,14 +2,16 @@
 
 ## Current State
 
-任务 1-7 已完成并通过本地验证，当前停在任务 8：等待用户授权后将 `chore/sync-upstream-2026-05-26` 合回本地 `master/dev`。任务 9 推送 `origin` 仍需要单独明确授权。
+本任务是历史 predecessor/reference，不再是当前执行 authority。当前前后端联合同步的 canonical plan 位于后端仓库 `/home/cheng/git-project/CLIProxyAPI/.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`，前端仓库内的引用入口位于 `.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`。
+
+原任务 1-7 已完成并通过当时本地验证；原任务 8/9 不再从本任务继续执行。
 
 ## Current Task
 
-- Current task: 8 合回 `master/dev`（本地，不推送）
-- Current branch: `chore/sync-upstream-2026-05-26`
-- Stop condition: `waiting_user`
-- Canonical plan: `plans/2026-05-28-sync-upstream-implementation-plan.md`
+- Current task: historical predecessor/reference
+- Current branch: not authoritative
+- Stop condition: `superseded_by_cross_repository_task`
+- Canonical plan: `/home/cheng/git-project/CLIProxyAPI/.agents/tasks/20260612-sync-upstream-v7-fork-customizations/plans/2026-06-12-sync-upstream-v7-fork-customizations-implementation-plan.md`
 
 ## Completed Scope
 
@@ -33,9 +35,9 @@
 
 ## Remaining Work
 
-- 任务 8：用户授权后，本地合回 `master/dev`，不推送。
-- 任务 9：用户单独明确授权后，推送目标分支到 `origin`。
-- 真实 CI/release 未触发，仍需在推送后由远端流程或发布授权完成。
+- 本任务内不再继续任务 8/9。
+- 若需要继续前后端同步、推送、release 或 `management.html` 上传，进入 `20260612-sync-upstream-v7-fork-customizations`。
+- 真实 CI/release 仍需在用户授权后由当前 canonical 任务处理。
 
 ## Evidence Pointers
 
@@ -47,11 +49,11 @@
 
 ## Immediate Next Step
 
-取得用户对任务 8 的明确授权后，执行本地合回 `master/dev` 并重新验证工作区状态。不要在任务 8 中推送远端。
+使用 `.agents/tasks/20260612-sync-upstream-v7-fork-customizations/` 作为当前入口；不要从本历史任务继续执行合并。
 
 ## Recommended Route
 
-继续使用 `aw-executing-plans` 的 direct_inline 路线推进任务 8。若用户要求推送，再进入任务 9 授权门。
+按当前 cross-repository canonical plan 的路由推进；本任务仅保留旧基线、旧 commit-scope review 和历史验证记录。
 
 ## Open Risks
 

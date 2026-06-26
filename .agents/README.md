@@ -12,7 +12,8 @@ This directory is the project-local persistent workspace for agent handoff, repo
 
 ## Active Tasks
 
-- `tasks/20260527-sync-upstream/`: upstream sync from `upstream/main@87702bb` into fork `master/dev@fac0e6f`, preserving fork customizations.
+- `tasks/20260612-sync-upstream-v7-fork-customizations/`: frontend reference for the current cross-repository canonical plan stored in `/home/cheng/git-project/CLIProxyAPI/.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`.
+- `tasks/20260527-sync-upstream/`: historical predecessor for upstream sync from `upstream/main@87702bb`; superseded by the 2026-06-12 cross-repository task and no longer the execution authority.
 
 ## Registry
 

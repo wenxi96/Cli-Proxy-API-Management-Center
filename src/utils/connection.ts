@@ -18,6 +18,11 @@ export const computeApiUrl = (base: string): string => {
 };
 
 export const detectApiBaseFromLocation = (): string => {
+  const configuredBase = import.meta.env.VITE_API_BASE;
+  if (configuredBase) {
+    return normalizeApiBase(configuredBase);
+  }
+
   try {
     const { protocol, hostname, port } = window.location;
     const normalizedPort = port ? `:${port}` : '';
