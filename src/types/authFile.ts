@@ -4,6 +4,7 @@
  */
 
 import type { RecentRequestBucket } from '@/utils/recentRequests';
+import type { CodexRateLimitResetCredit } from './quota';
 
 export type AuthFileType =
   | 'qwen'
@@ -81,14 +82,15 @@ export type AuthFileBatchCheckBucket =
 export interface AuthFileBatchCheckWindow {
   id: string;
   label?: string;
-  used_percent?: number;
-  remaining_percent?: number;
-  reset_at?: number;
-  reset_after_seconds?: number;
+  used_percent?: number | null;
+  remaining_percent?: number | null;
+  reset_at?: number | null;
+  reset_after_seconds?: number | null;
+  limit_window_seconds?: number | null;
   reset_time?: string;
-  remaining_amount?: number;
-  limit?: number;
-  used?: number;
+  remaining_amount?: number | null;
+  limit?: number | null;
+  used?: number | null;
   reset_hint?: string;
   token_type?: string;
   model_ids?: string[];
@@ -103,6 +105,10 @@ export interface AuthFileBatchCheckDetails {
   tier_id?: string;
   credit_balance?: number;
   plan_type?: string;
+  subscription_active_until?: string | number | null;
+  rate_limit_reset_credits?: CodexRateLimitResetCredit[];
+  rate_limit_reset_credits_available_count?: number | null;
+  rate_limit_reset_credits_error?: string;
   [key: string]: unknown;
 }
 

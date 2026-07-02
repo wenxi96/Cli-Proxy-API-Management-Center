@@ -2734,32 +2734,20 @@
   gap: 8px;
 }
 
-.batchCheckInlineMetrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 8px;
-}
-
-.batchCheckInlineMetric {
+.batchCheckInlineMeta {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.batchCheckInlineMetricLabel {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-tertiary);
-}
-
-.batchCheckInlineMetricValue {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-  word-break: break-word;
+}
+
+.batchCheckQuotaSection {
+  padding-top: 10px;
+  margin-top: 0;
 }
 
 .batchCheckInlineMessage {
