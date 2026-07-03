@@ -306,28 +306,36 @@ const toAntigravityQuotaSubscription = (
   };
 };
 
+// codex 窗口时长阈值与 id→labelKey 映射（模块级，供 A 路径 buildCodexQuotaWindows 与 B 路径 batchResultToQuotaView 共用）。
+export const CODEX_FIVE_HOUR_SECONDS = 18000;
+export const CODEX_WEEK_SECONDS = 604800;
+export const CODEX_MIN_MONTH_SECONDS = 28 * 24 * 60 * 60;
+export const CODEX_MAX_MONTH_SECONDS = 31 * 24 * 60 * 60;
+
+export const CODEX_WINDOW_META = {
+  codeFiveHour: { id: 'five-hour', labelKey: 'codex_quota.primary_window' },
+  codeWeekly: { id: 'weekly', labelKey: 'codex_quota.secondary_window' },
+  codeMonthly: { id: 'monthly', labelKey: 'codex_quota.team_secondary_window' },
+  codeReviewFiveHour: {
+    id: 'code-review-five-hour',
+    labelKey: 'codex_quota.code_review_primary_window',
+  },
+  codeReviewWeekly: {
+    id: 'code-review-weekly',
+    labelKey: 'codex_quota.code_review_secondary_window',
+  },
+  codeReviewMonthly: {
+    id: 'code-review-monthly',
+    labelKey: 'codex_quota.code_review_team_secondary_window',
+  },
+} as const;
+
 const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): CodexQuotaWindow[] => {
-  const FIVE_HOUR_SECONDS = 18000;
-  const WEEK_SECONDS = 604800;
-  const MIN_MONTH_SECONDS = 28 * 24 * 60 * 60;
-  const MAX_MONTH_SECONDS = 31 * 24 * 60 * 60;
-  const WINDOW_META = {
-    codeFiveHour: { id: 'five-hour', labelKey: 'codex_quota.primary_window' },
-    codeWeekly: { id: 'weekly', labelKey: 'codex_quota.secondary_window' },
-    codeMonthly: { id: 'monthly', labelKey: 'codex_quota.team_secondary_window' },
-    codeReviewFiveHour: {
-      id: 'code-review-five-hour',
-      labelKey: 'codex_quota.code_review_primary_window',
-    },
-    codeReviewWeekly: {
-      id: 'code-review-weekly',
-      labelKey: 'codex_quota.code_review_secondary_window',
-    },
-    codeReviewMonthly: {
-      id: 'code-review-monthly',
-      labelKey: 'codex_quota.code_review_team_secondary_window',
-    },
-  } as const;
+  const FIVE_HOUR_SECONDS = CODEX_FIVE_HOUR_SECONDS;
+  const WEEK_SECONDS = CODEX_WEEK_SECONDS;
+  const MIN_MONTH_SECONDS = CODEX_MIN_MONTH_SECONDS;
+  const MAX_MONTH_SECONDS = CODEX_MAX_MONTH_SECONDS;
+  const WINDOW_META = CODEX_WINDOW_META;
 
   const rateLimit = payload.rate_limit ?? payload.rateLimit ?? undefined;
   const codeReviewLimit =
@@ -706,7 +714,7 @@ const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
   return t('antigravity_quota.duration_less_than_minute');
 };
 
-const formatAntigravityResetLabel = (
+export const formatAntigravityResetLabel = (
   resetTime: string | undefined,
   t: TFunction,
   nowMs: number
@@ -721,12 +729,12 @@ const formatAntigravityResetLabel = (
   });
 };
 
-const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
+export const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
   ['gemini models', 'group_gemini_models'],
   ['claude and gpt models', 'group_claude_gpt_models'],
 ]);
 
-const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
+export const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
   ['weekly limit', 'weekly_limit'],
   ['daily limit', 'daily_limit'],
   ['5 hour limit', 'five_hour_limit'],
@@ -738,7 +746,7 @@ const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
 const normalizeAntigravityQuotaText = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, ' ');
 
-const translateAntigravityQuotaLabel = (
+export const translateAntigravityQuotaLabel = (
   value: string,
   keys: Map<string, string>,
   t: TFunction
@@ -747,7 +755,7 @@ const translateAntigravityQuotaLabel = (
   return key ? t(`antigravity_quota.${key}`) : value;
 };
 
-const translateAntigravityQuotaDescription = (
+export const translateAntigravityQuotaDescription = (
   value: string | undefined,
   t: TFunction
 ): string | undefined => {
@@ -761,7 +769,7 @@ const translateAntigravityQuotaDescription = (
   return value;
 };
 
-const getAntigravityPlanLabel = (
+export const getAntigravityPlanLabel = (
   subscription: AntigravityQuotaSubscription | null | undefined,
   t: TFunction
 ): string | null => {
@@ -887,7 +895,7 @@ const renderAntigravityItems = (
   return h(Fragment, null, ...nodes);
 };
 
-const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lite']);
+export const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lite']);
 
 const renderCodexItems = (
   quota: CodexQuotaState,
@@ -1513,7 +1521,7 @@ const fetchXaiQuota = async (file: AuthFileItem, t: TFunction): Promise<XaiBilli
   return summary;
 };
 
-const formatUsdFromCents = (cents: number | null): string => {
+export const formatUsdFromCents = (cents: number | null): string => {
   if (cents === null) return '--';
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
@@ -1521,7 +1529,7 @@ const formatUsdFromCents = (cents: number | null): string => {
   }).format(cents / 100);
 };
 
-const formatXaiRemainingAmount = (billing: XaiBillingSummary): string => {
+export const formatXaiRemainingAmount = (billing: XaiBillingSummary): string => {
   const remainingCents =
     billing.monthlyLimitCents !== null && billing.usedCents !== null
       ? Math.max(0, billing.monthlyLimitCents - billing.usedCents)
@@ -1535,7 +1543,7 @@ const formatXaiRemainingAmount = (billing: XaiBillingSummary): string => {
 const XAI_SUPERGROK_LIMIT_CENTS = 15_000;
 const XAI_SUPERGROK_HEAVY_LIMIT_CENTS = 150_000;
 
-const resolveXaiPlan = (
+export const resolveXaiPlan = (
   monthlyLimitCents: number | null
 ): { labelKey: string; premium: boolean } | null => {
   if (monthlyLimitCents === XAI_SUPERGROK_LIMIT_CENTS) {

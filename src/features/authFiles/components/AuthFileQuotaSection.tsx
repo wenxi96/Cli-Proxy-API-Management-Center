@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -18,7 +18,9 @@ import {
 } from '@/features/authFiles/constants';
 import { Button } from '@/components/ui/Button';
 import { IconRefreshCw } from '@/components/ui/icons';
-import { QuotaProgressBar } from '@/features/authFiles/components/QuotaProgressBar';
+import { QuotaRowsView } from '@/features/authFiles/components/QuotaRowsView';
+import { QuotaCardShell } from '@/features/authFiles/components/QuotaCardShell';
+import { providerStateToQuotaView } from '@/features/authFiles/utils/quotaView';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 type QuotaState = { status?: string; error?: string; errorStatus?: number } | undefined;
@@ -189,8 +191,27 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     quota?.error || t('common.unknown_error')
   );
 
+  const quotaStatusBadge =
+    quotaStatus === 'success' ? (
+      <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeSuccess}`}>
+        {t('auth_files.quota_status_available')}
+      </span>
+    ) : quotaStatus === 'error' ? (
+      <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeDanger}`}>
+        {t('auth_files.quota_status_error')}
+      </span>
+    ) : quotaStatus === 'loading' ? (
+      <span className={`${styles.batchCheckBadge} ${styles.batchCheckBadgeMuted}`}>
+        {t('auth_files.quota_status_loading')}
+      </span>
+    ) : null;
+
   return (
-    <div className={styles.quotaSection}>
+    <QuotaCardShell
+      title={t('auth_files.quota_overview_title')}
+      badges={quotaStatusBadge}
+      className={styles.quotaSection}
+    >
       {quotaStatus === 'loading' ? (
         <div className={styles.quotaMessage}>{t(`${config.i18nPrefix}.loading`)}</div>
       ) : quotaStatus === 'idle' ? (
@@ -209,16 +230,13 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
           })}
         </div>
       ) : quota ? (
-        (config.renderQuotaItems(quota, t, {
-          styles,
-          QuotaProgressBar,
-        }) as ReactNode)
+        <QuotaRowsView view={providerStateToQuotaView(quotaType, quota, t)} />
       ) : (
         <div className={styles.quotaMessage}>{t(`${config.i18nPrefix}.idle`)}</div>
       )}
       {quotaStatus !== 'idle' && resetQuotaAction && (
         <div className={styles.quotaCardActions}>{resetQuotaAction}</div>
       )}
-    </div>
+    </QuotaCardShell>
   );
 }
