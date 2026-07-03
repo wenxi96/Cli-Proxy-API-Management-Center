@@ -5,6 +5,7 @@ import type {
   AuthFileBatchCheckResult,
   AuthFileBatchCheckWindow,
   ClaudeQuotaState,
+  CodexQuotaWindow,
   CodexQuotaState,
   KimiQuotaState,
   XaiQuotaState,
@@ -101,6 +102,18 @@ const isCodexMonthlyWindow = (window: AuthFileBatchCheckWindow): boolean =>
   window.limit_window_seconds >= CODEX_MIN_MONTH_SECONDS &&
   window.limit_window_seconds <= CODEX_MAX_MONTH_SECONDS;
 
+const hasBatchWindowDisplayData = (window: AuthFileBatchCheckWindow): boolean =>
+  isFiniteNumber(window.remaining_percent) ||
+  isFiniteNumber(window.used_percent) ||
+  isFiniteNumber(window.reset_at) ||
+  isFiniteNumber(window.reset_after_seconds) ||
+  isFiniteNumber(window.remaining_amount) ||
+  isFiniteNumber(window.limit) ||
+  isFiniteNumber(window.used) ||
+  Boolean(String(window.reset_time ?? '').trim()) ||
+  Boolean(String(window.reset_hint ?? '').trim()) ||
+  (Array.isArray(window.model_ids) && window.model_ids.length > 0);
+
 /** 百分比小数算法（B 路径既有）：整数无小数，≥10 取 1 位，<10 取 2 位。 */
 export const formatPercentValue = (value: number | null): string => {
   if (value === null) return '--';
@@ -173,8 +186,14 @@ const resolveBatchWindowLabel = (
   if (!id) return undefined;
 
   if (provider === 'codex') {
+    if (id === CODEX_WINDOW_META.codeFiveHour.id && isCodexMonthlyWindow(window)) {
+      return t(CODEX_WINDOW_META.codeMonthly.labelKey);
+    }
     if (id === CODEX_WINDOW_META.codeWeekly.id && isCodexMonthlyWindow(window)) {
       return t(CODEX_WINDOW_META.codeMonthly.labelKey);
+    }
+    if (id === CODEX_WINDOW_META.codeReviewFiveHour.id && isCodexMonthlyWindow(window)) {
+      return t(CODEX_WINDOW_META.codeReviewMonthly.labelKey);
     }
     if (id === CODEX_WINDOW_META.codeReviewWeekly.id && isCodexMonthlyWindow(window)) {
       return t(CODEX_WINDOW_META.codeReviewMonthly.labelKey);
@@ -267,7 +286,11 @@ const buildBatchQuotaRows = (
   fallbackLabel: string,
   t: TFunction
 ): NormalizedQuotaLeafRow[] => {
-  const windows = collectBatchQuotaWindows(result.details);
+  const rawWindows = collectBatchQuotaWindows(result.details);
+  const windows =
+    result.provider === 'codex'
+      ? rawWindows.filter((window) => isCodexMonthlyWindow(window) || hasBatchWindowDisplayData(window))
+      : rawWindows;
 
   if (windows.length === 0) {
     if (!isFiniteNumber(result.remaining_percent)) return [];
@@ -303,6 +326,73 @@ const buildBatchQuotaRows = (
   });
 };
 //endregion
+
+const resolveBatchCodexWindowMeta = (
+  window: AuthFileBatchCheckWindow
+): { id: string; labelKey: string } | undefined => {
+  const id = String(window.id ?? '').trim();
+  const monthly = isCodexMonthlyWindow(window);
+
+  if (
+    monthly &&
+    (id === CODEX_WINDOW_META.codeReviewFiveHour.id ||
+      id === CODEX_WINDOW_META.codeReviewWeekly.id ||
+      id === CODEX_WINDOW_META.codeReviewMonthly.id)
+  ) {
+    return CODEX_WINDOW_META.codeReviewMonthly;
+  }
+
+  if (
+    monthly &&
+    (id === CODEX_WINDOW_META.codeFiveHour.id ||
+      id === CODEX_WINDOW_META.codeWeekly.id ||
+      id === CODEX_WINDOW_META.codeMonthly.id)
+  ) {
+    return CODEX_WINDOW_META.codeMonthly;
+  }
+
+  return Object.values(CODEX_WINDOW_META).find((item) => item.id === id);
+};
+
+const resolveBatchCodexUsedPercent = (window: AuthFileBatchCheckWindow): number | null => {
+  if (isFiniteNumber(window.used_percent)) return clampPercent(window.used_percent);
+  if (isFiniteNumber(window.remaining_percent)) return clampPercent(100 - window.remaining_percent);
+  return null;
+};
+
+const batchCodexWindowToQuotaWindow = (
+  window: AuthFileBatchCheckWindow
+): CodexQuotaWindow => {
+  const meta = resolveBatchCodexWindowMeta(window);
+  const label = String(window.label ?? window.id ?? '').trim();
+  return {
+    id: meta?.id ?? String(window.id ?? (label || 'window')),
+    label,
+    labelKey: meta?.labelKey,
+    usedPercent: resolveBatchCodexUsedPercent(window),
+    resetLabel: resolveResetLabel(window) ?? '-',
+  };
+};
+
+const batchResultToCodexQuotaState = (result: AuthFileBatchCheckResult): CodexQuotaState => {
+  const rawWindows = collectBatchQuotaWindows(result.details);
+  const windows = rawWindows
+    .filter((window) => isCodexMonthlyWindow(window) || hasBatchWindowDisplayData(window))
+    .map(batchCodexWindowToQuotaWindow);
+  const planType = String(result.details?.plan_type ?? '').trim();
+  const resetCreditsError = String(result.details?.rate_limit_reset_credits_error ?? '').trim();
+
+  return {
+    status: 'success',
+    windows,
+    planType: planType || null,
+    subscriptionActiveUntil: result.details?.subscription_active_until ?? null,
+    rateLimitResetCreditsAvailableCount:
+      result.details?.rate_limit_reset_credits_available_count ?? null,
+    rateLimitResetCredits: result.details?.rate_limit_reset_credits ?? [],
+    rateLimitResetCreditsError: resetCreditsError,
+  };
+};
 
 //region B 路径 adapter（导出，供 AuthFileBatchQuotaSection 复用）
 //
@@ -366,48 +456,20 @@ const buildBatchQuotaPlan = (
   return items.length > 0 ? items : undefined;
 };
 
-const buildBatchCodexResetCredits = (
-  result: AuthFileBatchCheckResult,
-  t: TFunction
-): NormalizedQuotaResetCredits | undefined => {
-  if (result.provider !== 'codex') return undefined;
-
-  const credits = result.details?.rate_limit_reset_credits ?? [];
-  const error = String(result.details?.rate_limit_reset_credits_error ?? '').trim();
-
-  if (credits.length > 0) {
-    return {
-      title: t('codex_quota.reset_credits_expiry_label'),
-      items: credits.map((credit, index) => ({
-        key: credit.id || `${credit.expiresAt}-${index}`,
-        label: t('codex_quota.reset_credit_number', { index: index + 1 }),
-        time: formatShanghaiDateTime(credit.expiresAt) || credit.expiresAt,
-      })),
-    };
-  }
-
-  if (error) {
-    return {
-      title: t('codex_quota.reset_credits_expiry_label'),
-      items: [],
-      error: t('codex_quota.reset_credits_expiry_failed', { message: error }),
-    };
-  }
-
-  return undefined;
-};
-
 export const batchResultToQuotaView = (
   result: AuthFileBatchCheckResult,
   t: TFunction
 ): NormalizedQuotaView => {
+  if (result.provider === 'codex') {
+    return codexStateToQuotaView(batchResultToCodexQuotaState(result), t);
+  }
+
   const fallbackLabel = t('auth_files.batch_check_remaining_percent');
   const planItems = buildBatchQuotaPlan(result, t);
 
   return {
     plan: planItems ? { items: planItems } : undefined,
     rows: buildBatchQuotaRows(result, fallbackLabel, t),
-    resetCredits: buildBatchCodexResetCredits(result, t),
     empty: t('common.not_set'),
   };
 };

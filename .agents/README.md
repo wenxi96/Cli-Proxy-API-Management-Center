@@ -1,41 +1,43 @@
-# Agents Workspace
+# .agents 工作区
 
 Persistence Mode: git-visible
 
-This directory is the project-local persistent workspace for agent handoff, repository governance, and reusable repository context.
+本目录用于保存当前仓库的持久化任务上下文、仓库治理记录和可复用仓库索引。
 
-## Canonical Workspace
+## 规范工作区
 
-- Canonical `.agents` path: `.agents/`
-- Current execution surface: main worktree
-- Active task pointer: `tasks/20260629-auth-file-quota-display-unification/task.md`
+- 规范 `.agents` 路径：`.agents/`
+- 当前执行面：主工作树
+- 当前活跃任务入口：`tasks/20260703-frontend-upstream-v1-17-8-absorption/task.md`
 
-## Active Tasks
+## 当前活跃任务
 
+- `tasks/20260703-codex-batch-quota-display-parity/`：修复 Codex 批量检查卡片的额度展示逻辑，使 B 路 Codex 展示复用单文件刷新 A 路的 `CodexQuotaState` 适配器。
+- `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`，当前已形成未提交合并候选、完成冲突解决、验证和自评审，等待用户确认是否提交。
 - `tasks/20260629-auth-file-quota-display-unification/`: direct_inline 任务，统一认证文件「单文件刷新额度」与「批量检查概览卡片」两处入口的额度展示（渲染层统一、A 对齐 B、provider 特有信息保留）；计划已落地，待批准进入实现。
 - `tasks/20260626-frontend-upstream-v1-17-7/`: frontend-owned task for absorbing `upstream/main@acf432b` / `v1.17.7` with fork customizations preserved; completed with `dev@1ff3f56`, `master@8f9eda1`, and release tag `v1.17.7-wx-2.7`.
-- `tasks/20260612-sync-upstream-v7-fork-customizations/`: historical frontend reference for the previous cross-repository canonical plan stored in `/home/cheng/git-project/CLIProxyAPI/.agents/tasks/20260612-sync-upstream-v7-fork-customizations/`.
-- `tasks/20260527-sync-upstream/`: historical predecessor for upstream sync from `upstream/main@87702bb`; superseded by the 2026-06-12 cross-repository task and no longer the execution authority.
+- `tasks/20260612-sync-upstream-v7-fork-customizations/`：历史参考任务，上一轮跨仓库上游同步计划的前端侧记录。
+- `tasks/20260527-sync-upstream/`：历史前置任务，已被 2026-06-12 跨仓库任务取代，不再作为执行权威。
 
-## Registry
+## 仓库索引
 
-- `registry/repo-overview.md`: high-level repository facts, scope, entry points, and unknowns.
-- `registry/repo-map.md`: structured map of important paths.
-- `registry/execution-surface.md`: commands and runnable surfaces discovered from repository evidence.
-- `registry/verification-commands.md`: verification command tiers derived from the command surface.
-- `registry/index-manifest.json`: machine-readable freshness fingerprint and coverage summary.
+- `registry/repo-overview.md`：仓库范围、入口和关键事实。
+- `registry/repo-map.md`：重要路径结构图。
+- `registry/execution-surface.md`：可运行命令与执行面说明。
+- `registry/verification-commands.md`：验证命令分层。
+- `registry/index-manifest.json`：机器可读索引新鲜度和覆盖范围。
 
-## Directory Roles
+## 目录职责
 
-- `registry/`: stable repository context and indexes.
-- `tasks/`: active task directories when a task needs persistent state.
-- `workers/`: worker-local scratch. Contents are ignored by default.
-- `reports/`: repository-level audit or review reports.
-- `scratch/`: temporary outputs. Contents are ignored by default.
-- `archive/`: completed or inactive task archives.
+- `registry/`：稳定仓库上下文与索引。
+- `tasks/`：需要持久状态的活跃任务目录。
+- `workers/`：worker 本地草稿，默认可丢弃。
+- `reports/`：仓库级审计或评审报告。
+- `scratch/`：临时输出，默认可清理。
+- `archive/`：已完成或已失效任务归档。
 
-## Local Conventions
+## 本地约定
 
-- Repository-specific rules currently exist in `CLAUDE.md`; this file is ignored by `.gitignore`, so stable team-facing rules should be mirrored into tracked governance docs when they need to travel with the repository.
-- Fork customizations listed in `CLAUDE.md` must be preserved during upstream sync work.
-- Do not store secrets, management keys, tokens, cookies, or raw private config values under `.agents/`.
+- 仓库专属规则当前记录在 `CLAUDE.md`；该文件被 `.gitignore` 忽略，需要随仓库移交的稳定规则应同步到已跟踪治理文档。
+- 上游同步时必须保留 `CLAUDE.md` 中列出的 fork 定制能力。
+- 不在 `.agents/` 中存放密钥、管理 key、token、cookie 或原始私密配置。
