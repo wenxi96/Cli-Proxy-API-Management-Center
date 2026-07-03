@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
-import { usageApi } from '@/services/api/usage';
+import { usageApi, type UsageAuthSummary } from '@/services/api/usage';
 import { downloadBlob } from '@/utils/download';
 import { loadModelPrices, saveModelPrices, type ModelPrice } from '@/utils/usage';
 
@@ -11,6 +11,7 @@ export interface UsagePayload {
   failure_count?: number;
   total_tokens?: number;
   apis?: Record<string, unknown>;
+  auths?: Record<string, UsageAuthSummary> | UsageAuthSummary[];
   [key: string]: unknown;
 }
 

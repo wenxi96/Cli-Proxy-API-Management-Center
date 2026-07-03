@@ -14,6 +14,7 @@ Persistence Mode: git-visible
 
 - `tasks/20260703-codex-batch-quota-display-parity/`：修复 Codex 批量检查卡片的额度展示逻辑，使 B 路 Codex 展示复用单文件刷新 A 路的 `CodexQuotaState` 适配器。
 - `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`，当前已形成未提交合并候选、完成冲突解决、验证和自评审，等待用户确认是否提交。
+- `tasks/20260703-frontend-auth-usage-token-cost-statistics/`：规划使用统计页凭证统计增加 token breakdown、估算金额和单凭证明细弹窗。
 - `tasks/20260629-auth-file-quota-display-unification/`: direct_inline 任务，统一认证文件「单文件刷新额度」与「批量检查概览卡片」两处入口的额度展示（渲染层统一、A 对齐 B、provider 特有信息保留）；计划已落地，待批准进入实现。
 - `tasks/20260626-frontend-upstream-v1-17-7/`: frontend-owned task for absorbing `upstream/main@acf432b` / `v1.17.7` with fork customizations preserved; completed with `dev@1ff3f56`, `master@8f9eda1`, and release tag `v1.17.7-wx-2.7`.
 - `tasks/20260612-sync-upstream-v7-fork-customizations/`：历史参考任务，上一轮跨仓库上游同步计划的前端侧记录。

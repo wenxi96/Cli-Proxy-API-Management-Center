@@ -193,6 +193,18 @@ export function UsagePage() {
     () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
     [usage, timeRange]
   );
+  const credentialRequestWindow = useMemo(() => {
+    if (timeRange === 'all' || !lastRefreshedAt) {
+      return undefined;
+    }
+
+    const toMs = lastRefreshedAt.getTime();
+    const fromMs = toMs - HOUR_WINDOW_BY_TIME_RANGE[timeRange] * 60 * 60 * 1000;
+    return {
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+    };
+  }, [lastRefreshedAt, timeRange]);
   const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
@@ -413,6 +425,9 @@ export function UsagePage() {
         codexConfigs={config?.codexApiKeys || []}
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={openaiProvidersForUsage}
+        modelPrices={modelPrices}
+        hasPrices={hasPrices}
+        requestWindow={credentialRequestWindow}
       />
 
       {/* Price Settings */}
