@@ -608,6 +608,62 @@
   white-space: nowrap;
 }
 
+.credentialStatsTable {
+  min-width: 1080px;
+
+  th:not(:first-child),
+  td:not(:first-child) {
+    white-space: nowrap;
+  }
+}
+
+.tokenNumberCell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.credentialCostCell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 118px;
+  font-variant-numeric: tabular-nums;
+}
+
+.costStatusComplete,
+.costStatusPartial,
+.costStatusUnconfigured {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 180px;
+  padding: 2px 7px;
+  border-radius: $radius-full;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.costStatusComplete {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border: 1px solid var(--success-badge-border, #6ee7b7);
+}
+
+.costStatusPartial {
+  color: var(--warning-color);
+  background: rgba($warning-color, 0.12);
+  border: 1px solid rgba($warning-color, 0.35);
+}
+
+.costStatusUnconfigured {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
 .durationCell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -992,6 +1048,123 @@
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
+}
+
+.credentialDetailsModal {
+  :global(.modal-body) {
+    overflow: hidden;
+  }
+}
+
+.credentialDetailsTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.credentialDetailsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.credentialDetailsSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.credentialSummaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-secondary);
+
+  span {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+  }
+
+  strong {
+    font-size: 17px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+}
+
+.credentialDetailsNotice,
+.credentialMissingModels {
+  padding: 8px 10px;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.credentialMissingModels {
+  color: var(--warning-color);
+  background: rgba($warning-color, 0.08);
+  border-color: rgba($warning-color, 0.28);
+}
+
+.credentialDetailsTableWrapper {
+  overflow: auto;
+  max-height: 440px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+
+  .table {
+    min-width: 980px;
+  }
+}
+
+.credentialDetailsFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.credentialDetailsPageInfo {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.credentialDetailsPager {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .chartLineHeader {

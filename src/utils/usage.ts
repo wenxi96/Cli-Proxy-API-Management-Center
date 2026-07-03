@@ -274,8 +274,11 @@ export function filterUsageByTimeRange<T>(
     totalSummary.totalTokens += apiSummary.totalTokens;
   });
 
+  const { auths: _auths, ...usageWithoutAuths } = usageRecord;
+  void _auths;
+
   return {
-    ...usageRecord,
+    ...usageWithoutAuths,
     ...toUsageSummaryFields(totalSummary),
     apis: filteredApis,
   } as T;
