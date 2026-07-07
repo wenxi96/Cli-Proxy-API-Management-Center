@@ -8,15 +8,17 @@ Persistence Mode: git-visible
 
 - 规范 `.agents` 路径：`.agents/`
 - 当前执行面：主工作树
-- 当前活跃任务入口：`tasks/20260703-frontend-upstream-v1-17-8-absorption/task.md`
+- 当前活跃任务入口：`tasks/20260707-frontend-upstream-v1-17-10-absorption/task.md`
 
 ## 当前活跃任务
 
-- `tasks/20260703-codex-batch-quota-display-parity/`：修复 Codex 批量检查卡片的额度展示逻辑，使 B 路 Codex 展示复用单文件刷新 A 路的 `CodexQuotaState` 适配器。
-- `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`，当前已形成未提交合并候选、完成冲突解决、验证和自评审，等待用户确认是否提交。
+- `tasks/20260703-codex-batch-quota-display-parity/`：修复 Codex 批量检查卡片的额度展示逻辑，使 B 路 Codex 展示复用单文件刷新 A 路的 `CodexQuotaState` 适配器；已提交到 `dev@75a4d64`、合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
+- `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`；已提交到 `dev@69afc30`、合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
+- `tasks/20260707-frontend-upstream-absorption-detection/`：调用项目级 `upstream-absorption` skill 执行前端上游吸收检测干跑，固定上游目标、生成更新清单并完成冲突预检。
+- `tasks/20260707-frontend-upstream-v1-17-10-absorption/`：前端独立吸收 `upstream/main@4064b01` / `v1.17.10`；已提交到 `dev@cfabc797`、合入 `master@6bf3d12`，并随 `v1.17.10-wx-2.10` 发布。
 - `tasks/20260703-frontend-auth-usage-token-cost-statistics/`：规划使用统计页凭证统计增加 token breakdown、估算金额和单凭证明细弹窗。
-- `tasks/20260629-auth-file-quota-display-unification/`: direct_inline 任务，统一认证文件「单文件刷新额度」与「批量检查概览卡片」两处入口的额度展示（渲染层统一、A 对齐 B、provider 特有信息保留）；计划已落地，待批准进入实现。
-- `tasks/20260626-frontend-upstream-v1-17-7/`: frontend-owned task for absorbing `upstream/main@acf432b` / `v1.17.7` with fork customizations preserved; completed with `dev@1ff3f56`, `master@8f9eda1`, and release tag `v1.17.7-wx-2.7`.
+- `tasks/20260629-auth-file-quota-display-unification/`：direct_inline 任务，统一认证文件「单文件刷新额度」与「批量检查概览卡片」两处入口的额度展示（渲染层统一、A 对齐 B、provider 特有信息保留）；计划已落地，待批准进入实现。
+- `tasks/20260626-frontend-upstream-v1-17-7/`：前端独立吸收 `upstream/main@acf432b` / `v1.17.7`，保留 fork 定制能力；已提交到 `dev@1ff3f56`、合入 `master@8f9eda1`，并随 `v1.17.7-wx-2.7` 发布。
 - `tasks/20260612-sync-upstream-v7-fork-customizations/`：历史参考任务，上一轮跨仓库上游同步计划的前端侧记录。
 - `tasks/20260527-sync-upstream/`：历史前置任务，已被 2026-06-12 跨仓库任务取代，不再作为执行权威。
 
