@@ -16,6 +16,7 @@ Persistence Mode: git-visible
 - `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`；已提交到 `dev@69afc30`、合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
 - `tasks/20260707-frontend-upstream-absorption-detection/`：调用项目级 `upstream-absorption` skill 执行前端上游吸收检测干跑，固定上游目标、生成更新清单并完成冲突预检。
 - `tasks/20260707-frontend-upstream-v1-17-10-absorption/`：前端独立吸收 `upstream/main@4064b01` / `v1.17.10`；已提交到 `dev@cfabc797`、合入 `master@6bf3d12`，并随 `v1.17.10-wx-2.10` 发布。
+- `tasks/20260708-frontend-upstream-absorption-detection/`：再次检测前端上游状态，确认 `origin/main == upstream/main@4064b01` / `v1.17.10`，当前无新增上游提交需要吸收。
 - `tasks/20260703-frontend-auth-usage-token-cost-statistics/`：规划使用统计页凭证统计增加 token breakdown、估算金额和单凭证明细弹窗。
 - `tasks/20260629-auth-file-quota-display-unification/`：direct_inline 任务，统一认证文件「单文件刷新额度」与「批量检查概览卡片」两处入口的额度展示（渲染层统一、A 对齐 B、provider 特有信息保留）；计划已落地，待批准进入实现。
 - `tasks/20260626-frontend-upstream-v1-17-7/`：前端独立吸收 `upstream/main@acf432b` / `v1.17.7`，保留 fork 定制能力；已提交到 `dev@1ff3f56`、合入 `master@8f9eda1`，并随 `v1.17.7-wx-2.7` 发布。
