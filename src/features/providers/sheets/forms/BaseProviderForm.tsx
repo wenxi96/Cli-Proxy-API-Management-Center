@@ -144,10 +144,6 @@ function buildInitialForm(
   const disabled = hasDisableAllModelsRule(cfg.excludedModels);
   const excludedList = stripDisableAllRule(cfg.excludedModels);
   return {
-    // Keep the API key blank in edit mode. Pre-filling the real key makes this
-    // password field a browser-autofill target (the saved management key can
-    // overwrite it) and defeats the "leave empty = keep unchanged" contract; an
-    // empty field is preserved on save via buildProviderKeyConfig's existing fallback.
     apiKey: '',
     name: '',
     displayName: cfg.displayName ?? '',
@@ -233,6 +229,10 @@ export function BaseProviderForm({
   const [error, setError] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Set<number>>(new Set());
   const [showSingleApiKey, setShowSingleApiKey] = useState(false);
+  const [singleApiKeyEdited, setSingleApiKeyEdited] = useState(false);
+  const [editedApiKeyEntryIndices, setEditedApiKeyEntryIndices] = useState<Set<number>>(
+    new Set()
+  );
 
   const togglePasswordVisibility = (idx: number) => {
     setShowPasswords((prev) => {
@@ -242,6 +242,15 @@ export function BaseProviderForm({
       } else {
         next.add(idx);
       }
+      return next;
+    });
+  };
+
+  const markApiKeyEntryEdited = (idx: number) => {
+    setEditedApiKeyEntryIndices((prev) => {
+      if (prev.has(idx)) return prev;
+      const next = new Set(prev);
+      next.add(idx);
       return next;
     });
   };
@@ -265,6 +274,11 @@ export function BaseProviderForm({
     if (mode !== 'edit' || !resource) return '';
     return (resource.raw as { authIndex?: string } | undefined)?.authIndex ?? '';
   }, [mode, resource]);
+
+  const visibleSingleApiKey =
+    mode === 'edit' && showSingleApiKey && !singleApiKeyEdited && !form.apiKey
+      ? fallbackApiKey
+      : form.apiKey;
 
   const connectivityMessages = useMemo<ConnectivityErrorMessages>(
     () => ({
@@ -479,6 +493,18 @@ export function BaseProviderForm({
       });
       return next;
     });
+    setEditedApiKeyEntryIndices((prev) => {
+      if (!prev.size) return prev;
+      const next = new Set<number>();
+      prev.forEach((idx) => {
+        if (idx < removeIdx) {
+          next.add(idx);
+        } else if (idx > removeIdx) {
+          next.add(idx - 1);
+        }
+      });
+      return next;
+    });
     updateField(
       'apiKeyEntries',
       actualApiKeyEntries.filter((_, i) => i !== removeIdx)
@@ -501,7 +527,7 @@ export function BaseProviderForm({
 
   return (
     <form id={formId} className={styles.form} onSubmit={handleSubmit} noValidate>
-      {/* 基础字段 */}
+      {/* Basic fields */}
       <div className={styles.section}>
         {descriptor.supportsName ? (
           <div className={styles.field}>
@@ -544,8 +570,11 @@ export function BaseProviderForm({
                 id={`${fid}-apiKey`}
                 className={styles.passwordInput}
                 type={showSingleApiKey ? 'text' : 'password'}
-                value={form.apiKey}
-                onChange={(e) => updateField('apiKey', e.target.value)}
+                value={visibleSingleApiKey}
+                onChange={(e) => {
+                  setSingleApiKeyEdited(true);
+                  updateField('apiKey', e.target.value);
+                }}
                 autoComplete="new-password"
                 data-1p-ignore="true"
                 data-lpignore="true"
@@ -750,7 +779,7 @@ export function BaseProviderForm({
         ) : null}
       </div>
 
-      {/* 高级折叠区 */}
+      {/* Advanced collapsible sections */}
       {descriptor.supportsApiKeyEntries && form.apiKeyEntries ? (
         <Collapsible
           label={t('providersPage.form.apiKeyEntriesSection')}
@@ -829,15 +858,23 @@ export function BaseProviderForm({
                       <input
                         className={styles.passwordInput}
                         type={showPasswords.has(realIdx) ? 'text' : 'password'}
-                        value={entry.apiKey}
-                        onChange={(e) =>
+                        value={
+                          mode === 'edit' &&
+                          showPasswords.has(realIdx) &&
+                          !editedApiKeyEntryIndices.has(realIdx) &&
+                          !entry.apiKey
+                            ? (entry.existingApiKey ?? '')
+                            : entry.apiKey
+                        }
+                        onChange={(e) => {
+                          markApiKeyEntryEdited(realIdx);
                           updateField(
                             'apiKeyEntries',
                             apiKeyEntries.map((it, i) =>
                               i === realIdx ? { ...it, apiKey: e.target.value } : it
                             )
-                          )
-                        }
+                          );
+                        }}
                         autoComplete="new-password"
                         data-1p-ignore="true"
                         data-lpignore="true"
