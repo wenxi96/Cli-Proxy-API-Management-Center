@@ -1981,7 +1981,7 @@
       "displayNamePlaceholder": "Optional label shown in lists and usage views",
       "apiKey": "API key",
       "apiKeyCreatePlaceholder": "Enter API key",
-      "apiKeyEditPlaceholder": "Leave empty to keep unchanged",
+      "apiKeyEditPlaceholder": "Current key is saved; reveal or replace it",
       "baseUrl": "Base URL",
       "baseUrlRequiredHint": "Required for this provider",
       "proxyUrl": "Proxy URL",

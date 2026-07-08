@@ -1981,7 +1981,7 @@
       "displayNamePlaceholder": "可选,用于列表和用量视图展示",
       "apiKey": "API 密钥",
       "apiKeyCreatePlaceholder": "输入 API 密钥",
-      "apiKeyEditPlaceholder": "留空表示不修改",
+      "apiKeyEditPlaceholder": "当前密钥已保存，可查看或替换",
       "baseUrl": "服务地址",
       "baseUrlRequiredHint": "此提供商要求填写服务地址",
       "proxyUrl": "代理 URL",

@@ -1981,7 +1981,7 @@
       "displayNamePlaceholder": "Необязательная метка для списков и статистики",
       "apiKey": "API-ключ",
       "apiKeyCreatePlaceholder": "Введите API-ключ",
-      "apiKeyEditPlaceholder": "Оставьте пустым, чтобы не менять",
+      "apiKeyEditPlaceholder": "Текущий ключ сохранен; можно показать или заменить",
       "baseUrl": "Base URL",
       "baseUrlRequiredHint": "Обязательно для этого провайдера",
       "proxyUrl": "Proxy URL",
