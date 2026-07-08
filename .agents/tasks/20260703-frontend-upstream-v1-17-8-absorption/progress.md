@@ -22,7 +22,7 @@
 - 文件： `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/evidence/20260703-frontend-self-review.md`
 - 验证： `git diff --cached --stat`; `git diff --cached -U80 -- src/hooks/useVisualConfig.ts src/types/visualConfig.ts`; `git diff --cached -U60 -- src/features/authFiles/constants.ts src/features/authFiles/hooks/useAuthFilesPrefixProxyEditor.ts src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx`; `git diff --cached -U60 -- src/services/api/plugins.ts src/types/plugin.ts src/features/plugins/PluginStorePage.tsx`; `git diff --check`; `rg -n "^(<<<<<<<|=======|>>>>>>>)" .`
 - 结果： 未发现需要修复的实质问题；无冲突标记；空白检查通过。
-- 下一步： 汇总前后端候选状态，等待用户确认是否提交。
+- 下一步： 后续已按用户授权完成提交、推送、合入 `master` 和发版，见后续记录。
 
 ### 2026-07-03 前端任务收口
 
@@ -30,7 +30,7 @@
 - 文件： `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/closeout.md`; `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/task.md`
 - 验证： `git status --short --branch`; `git diff --check`; `rg -n "^(<<<<<<<|=======|>>>>>>>)" .`
 - 结果： 前端候选仍在 `dev` 工作区，未提交；无冲突标记；空白检查通过。
-- 下一步： 等待用户授权是否提交。
+- 下一步： 后续已按用户授权完成提交、推送、合入 `master` 和发版，见后续记录。
 
 ### 2026-07-03 完成前复核
 
@@ -38,4 +38,12 @@
 - 文件： `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/evidence/20260703-frontend-merge-verification.md`
 - 验证： `git rev-parse --short MERGE_HEAD`; `git rev-parse --short upstream/main`; `npm run build`; `npm run lint`; `git diff --check`; `git ls-files -u`; `rg -n "^(<<<<<<<|=======|>>>>>>>)" .`
 - 结果： `MERGE_HEAD` 与 `upstream/main` 均为 `e9817a8`；构建通过；lint 通过；无未解决 merge 条目；无冲突标记；空白检查通过。
-- 下一步： 汇总前后端完成状态，等待用户明确授权是否提交、推送或发版。
+- 下一步： 后续已按用户授权完成提交、推送、合入 `master` 和发版，见后续记录。
+
+### 2026-07-03 提交推送与发布后复核
+
+- 动作： 按用户授权提交前端上游吸收候选，推送 `dev`，合入并推送 `master`，创建发布标签，并完成发布后只读复核。
+- 文件： `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/task.md`; `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/closeout.md`; `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/handoff.md`; `.agents/tasks/20260703-frontend-upstream-v1-17-8-absorption/progress.md`; `.agents/README.md`
+- 验证： `git ls-remote --heads origin dev master`; `git ls-remote --tags origin v1.17.8-wx-2.9`; GitHub Actions run API；Release 页面 HTTP 检查；`management.html` release 资产下载检查
+- 结果： `origin/dev@75a4d64`、`origin/master@cbe6d0e`、`v1.17.8-wx-2.9` 均已就位；Build and Release 发布工作流为 `completed/success`；发布页面和 `management.html` 资产检查通过。
+- 下一步： 无本任务剩余提交、推送或发版工作；后续上游新提交另建吸收任务。

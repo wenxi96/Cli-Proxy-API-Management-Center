@@ -1,5 +1,5 @@
 ---
-Status: implemented
+Status: released
 Created: 2026-07-03
 Owner: frontend
 Execution Route: direct_inline

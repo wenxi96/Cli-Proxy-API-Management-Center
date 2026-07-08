@@ -2,7 +2,7 @@
 
 ## Current State
 
-本任务处于 implemented 状态，前端业务代码已由 Codex 子代理实现并由主线程复核验证；改动尚未提交。当前实现已在使用统计页凭证统计中接入 token breakdown、估算金额、价格覆盖状态和单凭证明细弹窗。
+本任务处于 released 状态，前端业务代码已提交到 `dev@769b292f`、合入 `master@ca8e8032`，并随发布标签 `v1.17.8-wx-2.10` 发布。当前实现已在使用统计页凭证统计中接入 token 明细、估算金额、价格覆盖状态和单凭证明细弹窗。
 
 ## Completed Scope
 
@@ -16,6 +16,7 @@
 - 实现 `usageApi.getAuthUsageRequests`、凭证 usage 聚合 helper、凭证统计表 token/金额列、单凭证明细弹窗和本地降级路径。
 - 补齐简体中文、繁体中文、英文、俄文文案以及宽表格 / 弹窗样式。
 - 时间范围过滤后的 usage 会移除顶层 `auths`，避免局部时间窗口误用全局后端认证文件聚合。
+- 完成 `dev`/`master` 推送、发布标签 `v1.17.8-wx-2.10` 发布和 GitHub Release 资产核验。
 
 ## Verification
 
@@ -29,9 +30,12 @@
 - `python3 /home/cheng/.agent-workstation/bootstrap/bootstrap.py standard-doc-audit --task /home/cheng/git-project/Cli-Proxy-API-Management-Center/.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics --json`: clean。
 - `python3 /home/cheng/.agent-workstation/bootstrap/bootstrap.py edit-batch-review-audit --report /home/cheng/git-project/Cli-Proxy-API-Management-Center/.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/reviews/2026-07-03-implementation-edit-batch-review.md --json`: clean。
 - `python3 /home/cheng/.agent-workstation/bootstrap/bootstrap.py project-agents-audit --repo /home/cheng/git-project/Cli-Proxy-API-Management-Center --json`: clean。
+- `git ls-remote --tags origin v1.17.8-wx-2.10`: tag points to `ca8e8032213711902835fdeefc1bcb926984410c`.
+- GitHub Actions `Build and Release` run `28651472017`: completed/success。
+- GitHub Release `v1.17.8-wx-2.10`: `management.html` uploaded。
+- Direct download check for `management.html`: HTTP 200。
 
 ## Remaining Work
 
-- 与后端真实接口做页面联调，重点验证全量视图使用 `usage.auths`、时间窗口视图使用本地 details 重算。
-- 若后续环境提供 `bun`，提交前可补跑仓库推荐的 `bun run type-check` 与 `bun run build`。
-- 提交时不要混入前端仓库其他历史 `.agents` 任务脏改。
+- 前端发布收口无剩余工作。
+- 当前仓库仍存在本任务外历史 `.agents` 脏改；本任务发布收口不依赖这些文件。

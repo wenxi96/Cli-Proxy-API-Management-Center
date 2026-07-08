@@ -61,5 +61,13 @@
 - Action: 接收并复核前端 Codex 子代理实现，主线程复跑类型检查、生产构建、diff 空白检查和构建产物状态检查。
 - Files: `src/services/api/usage.ts`; `src/utils/usage.ts`; `src/components/usage/credentialUsage.ts`; `src/components/usage/CredentialUsageDetailsModal.tsx`; `src/components/usage/CredentialStatsCard.tsx`; `src/components/usage/hooks/useUsageData.ts`; `src/components/usage/index.ts`; `src/pages/UsagePage.tsx`; `src/pages/UsagePage.module.scss`; `src/i18n/locales/zh-CN.json`; `src/i18n/locales/zh-TW.json`; `src/i18n/locales/en.json`; `src/i18n/locales/ru.json`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/task.md`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/progress.md`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/handoff.md`
 - Verification: `npm run lint`; `npm run type-check`; `npm run build`; `git diff --check`; `git status --short -- dist src package-lock.json package.json`; 子代理尝试的 `bun run type-check` / `bun run build` 因当前环境未安装 `bun` 失败，主线程已用可用的 `npm` 脚本完成类型检查、lint 和构建验证。
-- Result: 前端实现已落地。凭证统计表新增 token breakdown、估算金额、价格覆盖状态和详情入口；新增单凭证明细弹窗，优先调用后端分页接口，失败时降级使用本地 usage details；`usage.auths` 类型和 service 已补齐；时间范围过滤时避免误用全局 `auths` 聚合；四语言文案与样式已同步。主线程先发现并修复了 effect 同步 setState 与 render 内 `Date.now()` lint 问题；修复后 `npm run lint`、`npm run type-check`、`npm run build` 和 `git diff --check` 均通过，`dist` 未留下工作区变更。
+- Result: 前端实现已落地。凭证统计表新增 token 明细、估算金额、价格覆盖状态和详情入口；新增单凭证明细弹窗，优先调用后端分页接口，失败时降级使用本地 usage details；`usage.auths` 类型和 service 已补齐；时间范围过滤时避免误用全局 `auths` 聚合；四语言文案与样式已同步。主线程先发现并修复了 effect 同步 setState 与 render 内 `Date.now()` lint 问题；修复后 `npm run lint`、`npm run type-check`、`npm run build` 和 `git diff --check` 均通过，`dist` 未留下工作区变更。
 - Next: 与后端接口做真实联调；提交前再次确认 `.agents` 中其他历史任务脏改不混入本任务提交。
+
+### 2026-07-03 17:51 HKT 发布与核验收口
+
+- Action: 将前端 `master@ca8e8032` 打发布标签 `v1.17.8-wx-2.10` 并推送，等待 GitHub Actions 完成后核验发布资产。
+- Files: `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/task.md`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/progress.md`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/handoff.md`; `.agents/tasks/20260703-frontend-auth-usage-token-cost-statistics/closeout.md`
+- Verification: 在 detached `master` worktree 中执行 `bash scripts/version.sh auto-release`; `git tag v1.17.8-wx-2.10 master`; `git push origin v1.17.8-wx-2.10`; `git ls-remote --tags origin v1.17.8-wx-2.10`; GitHub Actions API run `28651472017` completed/success; GitHub Release API for `v1.17.8-wx-2.10` lists `management.html` uploaded; direct download check for `management.html` returned HTTP 200。
+- Result: 前端发布完成并通过核验；`management.html` release 资产可用。
+- Next: 本任务前端发布已收口，无前端发布后续动作。

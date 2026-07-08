@@ -2,14 +2,14 @@
 
 ## 当前状态
 
-前端合并吸收任务已完成到“已合并候选、已解决冲突、已验证、已自评审、未提交”状态。
+前端合并吸收任务已完成到“已提交、已推送、已合入 master、已发版并完成发布后复核”状态。
 
 - 当前分支：`dev`
 - 吸收目标：`upstream/main@e9817a8` / `v1.17.8`
-- 当前方式：`git merge --no-commit --no-ff upstream/main`
-- 提交状态：未提交
-- 推送状态：未推送
-- 发版状态：未发版
+- 吸收提交：`dev@69afc30`
+- 发布合并：`master@cbe6d0e`
+- 推送状态：`origin/dev@75a4d64`；`origin/master@cbe6d0e`
+- 发版状态：`v1.17.8-wx-2.9`
 
 ## 已完成范围
 
@@ -46,7 +46,7 @@
 
 ## 验证
 
-已执行并通过：
+合并候选阶段已执行并通过：
 
 ```bash
 npm run build
@@ -63,6 +63,14 @@ rg -n "^(<<<<<<<|=======|>>>>>>>)" .
 
 补充说明：当前环境没有 `bun` 命令，因此使用已有 `node_modules` 的 npm scripts 等价执行 `tsc && vite build` 与 ESLint。
 
+发布后已复核：
+
+- `git ls-remote --heads origin dev master`：远端 `dev` / `master` 指向预期提交。
+- `git ls-remote --tags origin v1.17.8-wx-2.9`：tag peel 指向 `master@cbe6d0e`。
+- GitHub Build and Release 发布工作流：`completed/success`。
+- Release 页面返回 HTTP 200。
+- `management.html` 资产返回 HTTP 200，下载大小 `2943789`。
+
 ## 评审结果
 
 已完成主线程自评审，未发现需要修复的实质问题。
@@ -75,13 +83,9 @@ rg -n "^(<<<<<<<|=======|>>>>>>>)" .
 
 ## 剩余工作
 
-需要用户后续明确授权后才能执行：
-
-- 提交当前前端合并候选。
-- 推送 `dev` / 合入 `master`。
-- 创建或推送 release tag。
+无本任务剩余提交、推送或发版工作。
 
 ## 剩余风险
 
 - 未启动浏览器做真实 UI 交互验证。
-- 当前合并候选仍处于工作区，尚未形成 Git commit。
+- 任务完成后上游 `main` 已继续前进；后续上游增量应另建吸收任务处理。

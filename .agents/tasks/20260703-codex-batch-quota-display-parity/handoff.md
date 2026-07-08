@@ -2,7 +2,7 @@
 
 ## Current State
 
-前端修复已落地并通过 npm 验证和 Vite SSR 行为验证，任务状态为 complete。最终是否提交、推送或发版仍需用户授权。
+前端修复已落地并通过 npm 验证和 Vite SSR 行为验证，任务状态为 complete。修复已提交到 `dev@75a4d64`，合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
 
 ## Completed Scope
 
@@ -21,4 +21,4 @@
 ## Remaining Work
 
 - 未执行浏览器人工截图验证；当前覆盖为类型、lint、生产构建和代码路径复核。
-- 等待用户决定是否提交本次前端改动。
+- 无本任务剩余提交、推送或发版工作。

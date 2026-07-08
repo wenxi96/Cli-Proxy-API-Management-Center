@@ -46,6 +46,13 @@ Bugfix Status
 | `src/features/authFiles/utils/quotaView.tsx` | code | 按月度窗口时长修正 meta，过滤无展示数据的空 Codex window | 修复月度误标和空 weekly 行 | 覆盖用户反馈样本 |
 | `.agents/tasks/20260703-codex-batch-quota-display-parity/*` | docs | 中文记录任务、根因、验证和收口 | 满足治理记录要求 | 保留决策证据 |
 
+## 提交与发布
+
+- 修复提交：`dev@75a4d64`
+- 发布合并：`master@cbe6d0e`
+- 发布标签：`v1.17.8-wx-2.9`
+- 发布后复核：远端 `dev` / `master`、发布标签、GitHub Build and Release 发布工作流、发布页面与 `management.html` 资产均已检查通过。
+
 ## 验证
 
 | 检查项 | 命令或步骤 | 最新结果 | 证据 | 范围 |

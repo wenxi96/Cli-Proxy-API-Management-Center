@@ -18,7 +18,7 @@ Status: complete
 - 不重写 QuotaRowsView。
 - 不改单文件刷新真实 provider API 调用。
 - 不引入新的前端测试框架或依赖。
-- 不提交、不推送、不发版。
+- 修复实现阶段不自行提交、推送或发版；后续已按用户授权完成提交、推送、合入 `master` 和发版。
 
 ## 验收
 
@@ -26,3 +26,4 @@ Status: complete
 - 月度窗口在 B 路显示为月度，不再显示为 5 小时。
 - 没有有效数值的空周窗口不再渲染。
 - `npm run type-check`、`npm run lint`、`npm run build` 通过。
+- 修复提交已进入 `dev@75a4d64` 与 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
