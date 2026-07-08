@@ -43,5 +43,7 @@ Persistence Mode: git-visible
 
 - 仓库专属规则当前记录在 `CLAUDE.md`；该文件被 `.gitignore` 忽略，需要随仓库移交的稳定规则应同步到已跟踪治理文档。
 - 上游同步时必须保留 `CLAUDE.md` 中列出的 fork 定制能力。
+- 代码类改动：先提交并推送到 `dev`，再合并到 `master` 并推送 `master`。
+- `.agents` 治理文档类改动：只提交并推送到 `dev`，不得合入或污染 `master`。
 - `.agents/` 治理记录只在 `dev` 集成分支维护；`master` 稳定发布分支当前树必须保持不包含 `.agents`。
 - 不在 `.agents/` 中存放密钥、管理 key、token、cookie 或原始私密配置。
