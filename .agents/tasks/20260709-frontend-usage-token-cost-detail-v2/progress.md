@@ -143,3 +143,11 @@
 - Verification: Bun 1.3.11 `bun run test:usage` 通过，共 52 tests、225 assertions；`bun run type-check` 通过；`bun run build` 通过，Vite 转换 745 modules 并生成 single-file `dist/index.html`；`git diff --check` 通过，全部 untracked 文件逐个 `git diff --no-index --check` 无输出；standard-doc、independent-review、edit-batch-review 三类治理审计均为 clean；`git status --short --branch` 未出现非预期 tracked 文件，`dist/` 保持 ignored。
 - Result: 前端当前候选的静态评审与动态提交前门禁均已闭环，状态恢复为 `reviewed-ready`；尚未提交、推送或合并。
 - Next: 等待用户明确授权后，分别提交前端代码与仅进入 `dev` 的 `.agents` 治理记录。
+
+### 2026-07-15 17:23 前端提交、合入与发布收口
+
+- Action: 在 `dev` 分离提交代码与治理记录并推送，只将代码提交 cherry-pick 到 `master`；复验 master 候选后推送，按版本脚本创建正式 tag，并核验 Build and Release、资产下载和远端 refs。
+- Files: `.agents/README.md`; `.agents/tasks/20260709-frontend-usage-token-cost-detail-v2/task.md`; `.agents/tasks/20260709-frontend-usage-token-cost-detail-v2/progress.md`; `.agents/tasks/20260709-frontend-usage-token-cost-detail-v2/handoff.md`; `.agents/tasks/20260709-frontend-usage-token-cost-detail-v2/closeout.md`; `.agents/tasks/20260709-frontend-usage-token-cost-detail-v2/reviews/2026-07-15-release-closeout-edit-batch-review.md`
+- Verification: `dev@9254b55` 代码提交和 `dev@d4d1814` 治理提交已推送；`master@41d8d6d` 仅含代码且无 `.agents`；master 上 52 项 usage tests、type-check 与 production build 通过；`v1.17.10-wx-2.12` 指向 master；Actions `Build and Release#29403077463` completed/success；Release API 返回 `management.html` uploaded，大小 3,047,501 bytes，直接下载返回 HTTP 200；release closeout standard-doc/edit-batch 审计 clean，tracked/untracked whitespace 与冲突标记检查通过。
+- Result: 前端任务已发布并进入 `released`；运行实例未在本轮替换管理面板，发布范围为 GitHub Release 静态制品。
+- Next: 仅将本轮 `.agents` 收口提交推送到 `dev`，不修改 `master`。
