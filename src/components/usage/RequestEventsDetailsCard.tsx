@@ -11,12 +11,15 @@ import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
+  calculateUsageCost,
   collectUsageDetails,
   extractLatencyMs,
-  extractTotalTokens,
+  formatUsd,
   formatDurationMs,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
+  type CostStatus,
+  type ModelPriceOverrides,
   type UsageThinking,
 } from '@/utils/usage';
 import { downloadBlob } from '@/utils/download';
@@ -40,11 +43,24 @@ type RequestEventRow = {
   latencyMs: number | null;
   thinking: UsageThinking | null;
   thinkingLabel: string;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cachedTokens: number;
-  totalTokens: number;
+  hasKnownUsage: boolean;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+  cachedTokens: number | null;
+  totalTokens: number | null;
+  reportedTotalTokens: number | null;
+  computedTotalTokens: number | null;
+  cacheRatio: number | null;
+  inputCostUsd: number | null;
+  outputCostUsd: number | null;
+  cacheCostUsd: number | null;
+  totalCostUsd: number | null;
+  costStatus: CostStatus;
+  missingPriceModels: string[];
+  missingPriceComponents: string[];
 };
 
 export interface RequestEventsDetailsCardProps {
@@ -55,13 +71,8 @@ export interface RequestEventsDetailsCardProps {
   codexConfigs: ProviderKeyConfig[];
   vertexConfigs: ProviderKeyConfig[];
   openaiProviders: OpenAIProviderConfig[];
+  modelPrices: ModelPriceOverrides;
 }
-
-const toNumber = (value: unknown): number => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return parsed;
-};
 
 const normalizeThinkingText = (value: unknown): string => {
   if (typeof value !== 'string') return '';
@@ -94,11 +105,30 @@ const formatThinkingLabel = (thinking: UsageThinking | null): string => {
   return label;
 };
 
-const encodeCsv = (value: string | number): string => {
+const encodeCsv = (value: string | number | null): string => {
   const text = String(value ?? '');
   const trimmedLeft = text.replace(/^\s+/, '');
   const safeText = trimmedLeft && /^[=+\-@]/.test(trimmedLeft) ? `'${text}` : text;
   return `"${safeText.replace(/"/g, '""')}"`;
+};
+
+const formatTokenValue = (value: number | null): string =>
+  value === null ? '--' : value.toLocaleString();
+
+const formatCostValue = (value: number | null): string => (value === null ? '--' : formatUsd(value));
+
+const getCostStatusLabelKey = (status: CostStatus) => {
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  if (status === 'partial') return 'usage_stats.cost_status_partial';
+  if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
+  return 'usage_stats.cost_status_complete';
+};
+
+const getCostStatusClassName = (status: CostStatus) => {
+  if (status === 'complete') return styles.costStatusComplete;
+  if (status === 'partial') return styles.costStatusPartial;
+  if (status === 'unknown_usage') return styles.costStatusUnknown;
+  return styles.costStatusUnconfigured;
 };
 
 export function RequestEventsDetailsCard({
@@ -109,6 +139,7 @@ export function RequestEventsDetailsCard({
   codexConfigs,
   vertexConfigs,
   openaiProviders,
+  modelPrices,
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
   const latencyHint = t('usage_stats.latency_unit_hint', {
@@ -179,20 +210,13 @@ export function RequestEventsDetailsCard({
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
-      const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
-      const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
-      const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
-      const cachedTokens = Math.max(
-        Math.max(toNumber(detail.tokens?.cached_tokens), 0),
-        Math.max(toNumber(detail.tokens?.cache_tokens), 0)
-      );
-      const totalTokens = Math.max(
-        toNumber(detail.tokens?.total_tokens),
-        extractTotalTokens(detail)
-      );
+      const tokens = detail.tokens;
+      const hasKnownUsage = tokens.hasKnownUsage;
+      const cost = calculateUsageCost(detail, modelPrices);
       const latencyMs = extractLatencyMs(detail);
       const thinking = detail.thinking ?? null;
       const thinkingLabel = formatThinkingLabel(thinking);
+      const tokenValue = (value: number): number | null => (hasKnownUsage ? value : null);
 
       return {
         id: `${timestamp}-${model}-${sourceKey}-${authIndex}-${index}`,
@@ -209,11 +233,24 @@ export function RequestEventsDetailsCard({
         latencyMs,
         thinking,
         thinkingLabel,
-        inputTokens,
-        outputTokens,
-        reasoningTokens,
-        cachedTokens,
-        totalTokens,
+        hasKnownUsage,
+        inputTokens: tokenValue(tokens.inputTokens),
+        outputTokens: tokenValue(tokens.outputTokens),
+        reasoningTokens: tokenValue(tokens.reasoningTokens),
+        cacheReadTokens: tokenValue(tokens.cacheReadTokens),
+        cacheCreationTokens: tokenValue(tokens.cacheCreationTokens),
+        cachedTokens: tokenValue(tokens.cachedTokens),
+        totalTokens: tokenValue(tokens.totalTokens),
+        reportedTotalTokens: hasKnownUsage ? tokens.reportedTotalTokens : null,
+        computedTotalTokens: hasKnownUsage ? tokens.computedTotalTokens : null,
+        cacheRatio: hasKnownUsage ? tokens.cacheRatio : null,
+        inputCostUsd: cost.inputCostUsd,
+        outputCostUsd: cost.outputCostUsd,
+        cacheCostUsd: cost.cacheCostUsd,
+        totalCostUsd: cost.totalCostUsd,
+        costStatus: cost.costStatus,
+        missingPriceModels: cost.missingPriceModels,
+        missingPriceComponents: cost.missingPriceComponents,
       };
     });
 
@@ -251,7 +288,7 @@ export function RequestEventsDetailsCard({
         source: buildDisambiguatedSourceLabel(row),
       }))
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, sourceInfoMap, usage]);
+  }, [authFileMap, i18n.language, modelPrices, sourceInfoMap, usage]);
 
   const hasLatencyData = useMemo(() => rows.some((row) => row.latencyMs !== null), [rows]);
 
@@ -358,8 +395,20 @@ export function RequestEventsDetailsCard({
       'input_tokens',
       'output_tokens',
       'reasoning_tokens',
+      'cache_read_tokens',
+      'cache_creation_tokens',
       'cached_tokens',
+      'cache_ratio',
       'total_tokens',
+      'reported_total_tokens',
+      'computed_total_tokens',
+      'input_cost_usd',
+      'output_cost_usd',
+      'cache_cost_usd',
+      'total_cost_usd',
+      'cost_status',
+      'missing_price_models',
+      'missing_price_components',
     ];
 
     const csvRows = filteredRows.map((row) =>
@@ -378,8 +427,20 @@ export function RequestEventsDetailsCard({
         row.inputTokens,
         row.outputTokens,
         row.reasoningTokens,
+        row.cacheReadTokens,
+        row.cacheCreationTokens,
         row.cachedTokens,
+        row.cacheRatio === null ? null : row.cacheRatio,
         row.totalTokens,
+        row.reportedTotalTokens,
+        row.computedTotalTokens,
+        row.inputCostUsd,
+        row.outputCostUsd,
+        row.cacheCostUsd,
+        row.totalCostUsd,
+        row.costStatus,
+        row.missingPriceModels.join('|'),
+        row.missingPriceComponents.join('|'),
       ]
         .map((value) => encodeCsv(value))
         .join(',')
@@ -409,8 +470,22 @@ export function RequestEventsDetailsCard({
         input_tokens: row.inputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
+        cache_read_tokens: row.cacheReadTokens,
+        cache_creation_tokens: row.cacheCreationTokens,
         cached_tokens: row.cachedTokens,
         total_tokens: row.totalTokens,
+        reported_total_tokens: row.reportedTotalTokens,
+        computed_total_tokens: row.computedTotalTokens,
+        cache_ratio: row.cacheRatio,
+      },
+      cost: {
+        input_cost_usd: row.inputCostUsd,
+        output_cost_usd: row.outputCostUsd,
+        cache_cost_usd: row.cacheCostUsd,
+        total_cost_usd: row.totalCostUsd,
+        cost_status: row.costStatus,
+        missing_price_models: row.missingPriceModels,
+        missing_price_components: row.missingPriceComponents,
       },
     }));
 
@@ -420,6 +495,22 @@ export function RequestEventsDetailsCard({
       filename: `usage-events-${fileTime}.json`,
       blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
     });
+  };
+
+  const renderCostCell = (row: RequestEventRow) => {
+    const missingModelsLabel = row.missingPriceModels.join(', ');
+    const missingComponentsLabel = row.missingPriceComponents.join(', ');
+    const tooltip = [missingModelsLabel, missingComponentsLabel].filter(Boolean).join('\n');
+    return (
+      <span className={styles.requestEventsCostCell}>
+        <span>{formatCostValue(row.totalCostUsd)}</span>
+        {row.costStatus !== 'complete' && (
+          <span className={getCostStatusClassName(row.costStatus)} title={tooltip || undefined}>
+            {t(getCostStatusLabelKey(row.costStatus))}
+          </span>
+        )}
+      </span>
+    );
   };
 
   return (
@@ -539,6 +630,7 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.reasoning_tokens')}</th>
                   <th>{t('usage_stats.cached_tokens')}</th>
                   <th>{t('usage_stats.total_tokens')}</th>
+                  <th>{t('usage_stats.total_cost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -599,11 +691,12 @@ export function RequestEventsDetailsCard({
                         {row.thinkingLabel}
                       </span>
                     </td>
-                    <td>{row.inputTokens.toLocaleString()}</td>
-                    <td>{row.outputTokens.toLocaleString()}</td>
-                    <td>{row.reasoningTokens.toLocaleString()}</td>
-                    <td>{row.cachedTokens.toLocaleString()}</td>
-                    <td>{row.totalTokens.toLocaleString()}</td>
+                    <td>{formatTokenValue(row.inputTokens)}</td>
+                    <td>{formatTokenValue(row.outputTokens)}</td>
+                    <td>{formatTokenValue(row.reasoningTokens)}</td>
+                    <td>{formatTokenValue(row.cachedTokens)}</td>
+                    <td>{formatTokenValue(row.totalTokens)}</td>
+                    <td>{renderCostCell(row)}</td>
                   </tr>
                 ))}
               </tbody>

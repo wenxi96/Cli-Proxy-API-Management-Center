@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { usageApi, type AuthUsageRequestsParams } from '@/services/api/usage';
 import { getErrorMessage } from '@/utils/helpers';
-import { formatDurationMs } from '@/utils/usage';
+import { formatDurationMs, formatUsd } from '@/utils/usage';
 import styles from '@/pages/UsagePage.module.scss';
 import {
   buildCredentialRequestRowsFromAuthItems,
@@ -27,10 +27,33 @@ const PAGE_SIZE = 50;
 const LOCAL_FALLBACK_LIMIT = 500;
 
 const getCostStatusLabelKey = (status: CredentialUsageRow['cost']['costStatus']) => {
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
   return 'usage_stats.cost_status_complete';
 };
+
+const getCostStatusClassName = (status: CredentialUsageRow['cost']['costStatus']) => {
+  if (status === 'complete') return styles.costStatusComplete;
+  if (status === 'partial') return styles.costStatusPartial;
+  if (status === 'unknown_usage') return styles.costStatusUnknown;
+  return styles.costStatusUnconfigured;
+};
+
+const formatCostPart = (value: number | null): string => (value === null ? '--' : formatUsd(value));
+const formatCacheRatio = (value: number | null): string =>
+  value === null ? '--' : `${(value * 100).toFixed(1)}%`;
+const formatTokenPart = (value: number, hasKnownUsage: boolean): string =>
+  hasKnownUsage ? value.toLocaleString() : '--';
+const getTokenCoverageLabelKey = (
+  status: CredentialUsageRow['tokens']['usageCoverageStatus']
+) =>
+  status === 'partial'
+    ? 'usage_stats.token_coverage_partial'
+    : 'usage_stats.token_coverage_unknown';
+const getTokenCoverageClassName = (
+  status: CredentialUsageRow['tokens']['usageCoverageStatus']
+) => (status === 'partial' ? styles.costStatusPartial : styles.costStatusUnknown);
 
 export function CredentialUsageDetailsModal({
   open,
@@ -138,7 +161,9 @@ export function CredentialUsageDetailsModal({
   const costLabel = formatCredentialCostLabel(credential.cost);
   const costStatusLabel = t(getCostStatusLabelKey(credential.cost.costStatus));
   const missingModels = credential.cost.missingPriceModels;
+  const missingComponents = credential.cost.missingPriceComponents;
   const missingModelsLabel = missingModels.slice(0, 8).join(', ');
+  const missingComponentsLabel = missingComponents.slice(0, 8).join(', ');
   const canGoPrev = offset > 0;
   const canGoNext = offset + PAGE_SIZE < total;
   const shownFrom = total > 0 ? offset + 1 : 0;
@@ -206,33 +231,50 @@ export function CredentialUsageDetailsModal({
           </div>
           <div className={styles.credentialSummaryItem}>
             <span>{t('usage_stats.total_tokens')}</span>
-            <strong>{credential.tokens.totalTokens.toLocaleString()}</strong>
+            <strong>
+              {formatTokenPart(credential.tokens.totalTokens, credential.tokens.hasKnownUsage)}
+            </strong>
             <small>
-              {t('usage_stats.credential_token_breakdown_short', {
-                input: credential.tokens.inputTokens,
-                output: credential.tokens.outputTokens,
-                reasoning: credential.tokens.reasoningTokens,
-                cached: credential.tokens.cachedTokens,
-              })}
+              {credential.tokens.hasKnownUsage
+                ? t('usage_stats.credential_token_breakdown_short', {
+                    input: credential.tokens.inputTokens,
+                    output: credential.tokens.outputTokens,
+                    reasoning: credential.tokens.reasoningTokens,
+                    cached: credential.tokens.cachedTokens,
+                  })
+                : '--'}
+              {' · '}
+              {t('usage_stats.cache_ratio')}: {formatCacheRatio(credential.tokens.cacheRatio)}
             </small>
+            {credential.tokens.usageCoverageStatus !== 'complete' && (
+              <small
+                className={getTokenCoverageClassName(
+                  credential.tokens.usageCoverageStatus
+                )}
+              >
+                {t(getTokenCoverageLabelKey(credential.tokens.usageCoverageStatus))}
+              </small>
+            )}
           </div>
           <div className={styles.credentialSummaryItem}>
             <span>{t('usage_stats.estimated_cost')}</span>
             <strong>{costLabel}</strong>
             <small
-              className={
-                credential.cost.costStatus === 'complete'
-                  ? styles.costStatusComplete
-                  : credential.cost.costStatus === 'partial'
-                    ? styles.costStatusPartial
-                    : styles.costStatusUnconfigured
-              }
-              title={missingModelsLabel || undefined}
+              className={getCostStatusClassName(credential.cost.costStatus)}
+              title={[missingModelsLabel, missingComponentsLabel].filter(Boolean).join('\n') || undefined}
             >
               {costStatusLabel}
               {missingModels.length > 0
                 ? ` · ${t('usage_stats.missing_price_models_count', { count: missingModels.length })}`
                 : ''}
+              {missingComponents.length > 0
+                ? ` · ${t('usage_stats.missing_price_components_count', { count: missingComponents.length })}`
+                : ''}
+            </small>
+            <small>
+              {t('usage_stats.input_cost')}: {formatCostPart(credential.cost.inputCostUsd)} ·{' '}
+              {t('usage_stats.output_cost')}: {formatCostPart(credential.cost.outputCostUsd)} ·{' '}
+              {t('usage_stats.cache_cost')}: {formatCostPart(credential.cost.cacheCostUsd)}
             </small>
           </div>
         </div>
@@ -250,6 +292,12 @@ export function CredentialUsageDetailsModal({
           <div className={styles.credentialMissingModels} title={missingModelsLabel}>
             {t('usage_stats.missing_price_models')}: {missingModelsLabel}
             {missingModels.length > 8 ? '...' : ''}
+          </div>
+        )}
+        {missingComponents.length > 0 && (
+          <div className={styles.credentialMissingModels} title={missingComponentsLabel}>
+            {t('usage_stats.missing_price_components')}: {missingComponentsLabel}
+            {missingComponents.length > 8 ? '...' : ''}
           </div>
         )}
 
@@ -276,8 +324,12 @@ export function CredentialUsageDetailsModal({
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th>{t('usage_stats.reasoning_tokens')}</th>
                   <th>{t('usage_stats.cached_tokens')}</th>
+                  <th>{t('usage_stats.cache_ratio')}</th>
                   <th>{t('usage_stats.total_tokens')}</th>
-                  <th>{t('usage_stats.estimated_cost')}</th>
+                  <th>{t('usage_stats.input_cost')}</th>
+                  <th>{t('usage_stats.output_cost')}</th>
+                  <th>{t('usage_stats.cache_cost')}</th>
+                  <th>{t('usage_stats.total_cost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,21 +363,26 @@ export function CredentialUsageDetailsModal({
                         </span>
                       </td>
                       <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
-                      <td>{row.tokens.inputTokens.toLocaleString()}</td>
-                      <td>{row.tokens.outputTokens.toLocaleString()}</td>
-                      <td>{row.tokens.reasoningTokens.toLocaleString()}</td>
-                      <td>{row.tokens.cachedTokens.toLocaleString()}</td>
-                      <td>{row.tokens.totalTokens.toLocaleString()}</td>
+                      <td>{formatTokenPart(row.tokens.inputTokens, row.tokens.hasKnownUsage)}</td>
+                      <td>{formatTokenPart(row.tokens.outputTokens, row.tokens.hasKnownUsage)}</td>
+                      <td>{formatTokenPart(row.tokens.reasoningTokens, row.tokens.hasKnownUsage)}</td>
+                      <td>{formatTokenPart(row.tokens.cachedTokens, row.tokens.hasKnownUsage)}</td>
+                      <td>{formatCacheRatio(row.tokens.cacheRatio)}</td>
+                      <td>{formatTokenPart(row.tokens.totalTokens, row.tokens.hasKnownUsage)}</td>
+                      <td>{formatCostPart(row.cost.inputCostUsd)}</td>
+                      <td>{formatCostPart(row.cost.outputCostUsd)}</td>
+                      <td>{formatCostPart(row.cost.cacheCostUsd)}</td>
                       <td>
                         <span
-                          className={
-                            row.cost.costStatus === 'complete'
-                              ? styles.costStatusComplete
-                              : row.cost.costStatus === 'partial'
-                                ? styles.costStatusPartial
-                                : styles.costStatusUnconfigured
+                          className={getCostStatusClassName(row.cost.costStatus)}
+                          title={
+                            [
+                              row.cost.missingPriceModels.join(', '),
+                              row.cost.missingPriceComponents.join(', '),
+                            ]
+                              .filter(Boolean)
+                              .join('\n') || undefined
                           }
-                          title={row.cost.missingPriceModels.join(', ') || undefined}
                         >
                           {rowCostLabel}
                         </span>

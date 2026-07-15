@@ -335,7 +335,7 @@
   font-style: italic;
 }
 
-// API List (80%比例)
+// API list
 .apiSortBar {
   display: flex;
   flex-wrap: wrap;
@@ -516,7 +516,7 @@
   color: var(--text-secondary);
 }
 
-// Table (80%比例)
+// Tables
 .tableWrapper {
   overflow-x: auto;
 }
@@ -609,7 +609,7 @@
 }
 
 .credentialStatsTable {
-  min-width: 1080px;
+  min-width: 1360px;
 
   th:not(:first-child),
   td:not(:first-child) {
@@ -633,6 +633,7 @@
 
 .costStatusComplete,
 .costStatusPartial,
+.costStatusUnknown,
 .costStatusUnconfigured {
   display: inline-flex;
   align-items: center;
@@ -664,12 +665,18 @@
   border: 1px solid var(--border-color);
 }
 
+.costStatusUnknown {
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+}
+
 .durationCell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-// Pricing Section (80%比例)
+// Pricing section
 .pricingSection {
   display: flex;
   flex-direction: column;
@@ -708,12 +715,12 @@
     font-weight: 500;
   }
 
-  // 确保 Input 组件的 form-group 包装器不影响布局
+  // Keep the Input wrapper from changing the compact form layout.
   :global(.form-group) {
     margin: 0;
 
     > label {
-      display: none; // 隐藏 Input 自带的 label，使用外层的
+      display: none; // Use the outer label instead.
     }
   }
 
@@ -785,6 +792,18 @@
   }
 }
 
+.priceSourceBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 1px 6px;
+  border-radius: $radius-full;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  font-weight: 700;
+}
+
 .priceActions {
   display: flex;
   gap: 3px;
@@ -797,7 +816,7 @@
   gap: 12px;
 }
 
-// Chart Section (80%比例)
+// Chart section
 .chartSection {
   display: flex;
   flex-direction: column;
@@ -881,6 +900,13 @@
   }
 }
 
+.tokenCoverageNotice {
+  color: var(--warning-color);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
 .chartScroller {
   width: 100%;
   height: 100%;
@@ -888,7 +914,7 @@
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 
-  // Chart.js 默认会设置 canvas 的 touch-action: none，导致移动端无法横向滚动
+  // Chart.js sets canvas touch-action by default, which blocks mobile horizontal scrolling.
   :global(canvas) {
     touch-action: pan-x pan-y !important;
   }
@@ -1050,6 +1076,15 @@
   border: 1px solid var(--border-color);
 }
 
+.requestEventsCostCell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
 .credentialDetailsModal {
   :global(.modal-body) {
     overflow: hidden;
@@ -1142,7 +1177,7 @@
   border-radius: $radius-md;
 
   .table {
-    min-width: 980px;
+    min-width: 1280px;
   }
 }
 

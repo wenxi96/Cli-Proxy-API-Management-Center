@@ -1,12 +1,18 @@
 import { useCallback, useMemo } from 'react';
-import { collectUsageDetails, extractTotalTokens } from '@/utils/usage';
+import {
+  calculateUsageCost,
+  collectUsageDetails,
+  extractTotalTokens,
+  isCostUnresolved,
+  type ModelPriceOverrides,
+} from '@/utils/usage';
 import type { UsagePayload } from './useUsageData';
 
 export interface SparklineData {
   labels: string[];
   datasets: [
     {
-      data: number[];
+      data: Array<number | null>;
       borderColor: string;
       backgroundColor: string;
       fill: boolean;
@@ -25,6 +31,7 @@ export interface UseSparklinesOptions {
   usage: UsagePayload | null;
   loading: boolean;
   nowMs: number;
+  modelPrices: ModelPriceOverrides;
 }
 
 export interface UseSparklinesReturn {
@@ -35,20 +42,28 @@ export interface UseSparklinesReturn {
   costSparkline: SparklineBundle | null;
 }
 
-export function useSparklines({ usage, loading, nowMs }: UseSparklinesOptions): UseSparklinesReturn {
+export function useSparklines({
+  usage,
+  loading,
+  nowMs,
+  modelPrices,
+}: UseSparklinesOptions): UseSparklinesReturn {
   const lastHourSeries = useMemo(() => {
-    if (!usage) return { labels: [], requests: [], tokens: [] };
+    if (!usage) return { labels: [], requests: [], tokens: [], cost: [] as Array<number | null> };
     if (!Number.isFinite(nowMs) || nowMs <= 0) {
-      return { labels: [], requests: [], tokens: [] };
+      return { labels: [], requests: [], tokens: [], cost: [] as Array<number | null> };
     }
     const details = collectUsageDetails(usage);
-    if (!details.length) return { labels: [], requests: [], tokens: [] };
+    if (!details.length) return { labels: [], requests: [], tokens: [], cost: [] as Array<number | null> };
 
     const windowMinutes = 60;
     const now = nowMs;
     const windowStart = now - windowMinutes * 60 * 1000;
     const requestBuckets = new Array(windowMinutes).fill(0);
-    const tokenBuckets = new Array(windowMinutes).fill(0);
+    const tokenBuckets: Array<number | null> = new Array(windowMinutes).fill(0);
+    const unresolvedTokenBuckets = new Array(windowMinutes).fill(false);
+    const costBuckets: Array<number | null> = new Array(windowMinutes).fill(0);
+    const unresolvedCostBuckets = new Array(windowMinutes).fill(false);
 
     details.forEach((detail) => {
       const timestamp = detail.__timestampMs ?? 0;
@@ -60,7 +75,29 @@ export function useSparklines({ usage, loading, nowMs }: UseSparklinesOptions): 
         Math.floor((timestamp - windowStart) / 60000)
       );
       requestBuckets[minuteIndex] += 1;
-      tokenBuckets[minuteIndex] += extractTotalTokens(detail);
+      if (detail.tokens.hasKnownUsage) {
+        tokenBuckets[minuteIndex] =
+          (tokenBuckets[minuteIndex] ?? 0) + extractTotalTokens(detail);
+      } else {
+        unresolvedTokenBuckets[minuteIndex] = true;
+      }
+      const cost = calculateUsageCost(detail, modelPrices);
+      if (cost.totalCostUsd !== null) {
+        costBuckets[minuteIndex] = (costBuckets[minuteIndex] ?? 0) + cost.totalCostUsd;
+      } else if (isCostUnresolved(cost)) {
+        unresolvedCostBuckets[minuteIndex] = true;
+      }
+    });
+
+    tokenBuckets.forEach((value, index) => {
+      if (unresolvedTokenBuckets[index] && value === 0) {
+        tokenBuckets[index] = null;
+      }
+    });
+    costBuckets.forEach((value, index) => {
+      if (unresolvedCostBuckets[index] && value === 0) {
+        costBuckets[index] = null;
+      }
     });
 
     const labels = requestBuckets.map((_, idx) => {
@@ -70,12 +107,12 @@ export function useSparklines({ usage, loading, nowMs }: UseSparklinesOptions): 
       return `${h}:${m}`;
     });
 
-    return { labels, requests: requestBuckets, tokens: tokenBuckets };
-  }, [nowMs, usage]);
+    return { labels, requests: requestBuckets, tokens: tokenBuckets, cost: costBuckets };
+  }, [modelPrices, nowMs, usage]);
 
   const buildSparkline = useCallback(
     (
-      series: { labels: string[]; data: number[] },
+      series: { labels: string[]; data: Array<number | null> },
       color: string,
       backgroundColor: string
     ): SparklineBundle | null => {
@@ -148,11 +185,11 @@ export function useSparklines({ usage, loading, nowMs }: UseSparklinesOptions): 
   const costSparkline = useMemo(
     () =>
       buildSparkline(
-        { labels: lastHourSeries.labels, data: lastHourSeries.tokens },
+        { labels: lastHourSeries.labels, data: lastHourSeries.cost },
         '#f59e0b',
         'rgba(245, 158, 11, 0.18)'
       ),
-    [buildSparkline, lastHourSeries.labels, lastHourSeries.tokens]
+    [buildSparkline, lastHourSeries.cost, lastHourSeries.labels]
   );
 
   return {

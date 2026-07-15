@@ -4,6 +4,28 @@ import { Card } from '@/components/ui/Card';
 import { formatCompactNumber, formatUsd, type ApiStats } from '@/utils/usage';
 import styles from '@/pages/UsagePage.module.scss';
 
+const getCostStatusLabelKey = (status: ApiStats['costStatus']) => {
+  if (status === 'complete') return 'usage_stats.cost_status_complete';
+  if (status === 'partial') return 'usage_stats.cost_status_partial';
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  return 'usage_stats.cost_status_unconfigured';
+};
+
+const getCostStatusClassName = (status: ApiStats['costStatus']) => {
+  if (status === 'complete') return styles.costStatusComplete;
+  if (status === 'partial') return styles.costStatusPartial;
+  if (status === 'unknown_usage') return styles.costStatusUnknown;
+  return styles.costStatusUnconfigured;
+};
+
+const getTokenCoverageLabelKey = (status: ApiStats['tokenCoverageStatus']) =>
+  status === 'partial'
+    ? 'usage_stats.token_coverage_partial'
+    : 'usage_stats.token_coverage_unknown';
+
+const getTokenCoverageClassName = (status: ApiStats['tokenCoverageStatus']) =>
+  status === 'partial' ? styles.costStatusPartial : styles.costStatusUnknown;
+
 export interface ApiDetailsCardProps {
   apiStats: ApiStats[];
   loading: boolean;
@@ -48,7 +70,12 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
         case 'endpoint': return dir * a.endpoint.localeCompare(b.endpoint);
         case 'requests': return dir * (a.totalRequests - b.totalRequests);
         case 'tokens': return dir * (a.totalTokens - b.totalTokens);
-        case 'cost': return dir * (a.totalCost - b.totalCost);
+        case 'cost': {
+          if (a.totalCost === null && b.totalCost === null) return 0;
+          if (a.totalCost === null) return 1;
+          if (b.totalCost === null) return -1;
+          return dir * (a.totalCost - b.totalCost);
+        }
         default: return 0;
       }
     });
@@ -112,11 +139,33 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                             </span>
                           </span>
                           <span className={styles.apiBadge}>
-                            {t('usage_stats.tokens_count')}: {formatCompactNumber(api.totalTokens)}
+                            {t('usage_stats.tokens_count')}:{' '}
+                            {api.tokenCoverageStatus === 'unknown'
+                              ? '--'
+                              : formatCompactNumber(api.totalTokens)}
+                            {api.tokenCoverageStatus !== 'complete' && (
+                              <span className={getTokenCoverageClassName(api.tokenCoverageStatus)}>
+                                {t(getTokenCoverageLabelKey(api.tokenCoverageStatus))}
+                              </span>
+                            )}
                           </span>
-                          {hasPrices && api.totalCost > 0 && (
+                          {hasPrices && (
                             <span className={styles.apiBadge}>
-                              {t('usage_stats.total_cost')}: {formatUsd(api.totalCost)}
+                              {t('usage_stats.total_cost')}:{' '}
+                              {api.totalCost === null ? '--' : formatUsd(api.totalCost)}
+                              {api.costStatus !== 'complete' && (
+                                <span
+                                  className={getCostStatusClassName(api.costStatus)}
+                                  title={[
+                                    api.missingPriceModels.join(', '),
+                                    api.missingPriceComponents.join(', '),
+                                  ]
+                                    .filter(Boolean)
+                                    .join('\n')}
+                                >
+                                  {t(getCostStatusLabelKey(api.costStatus))}
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>
@@ -139,7 +188,20 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                                 </span>
                               </span>
                             </span>
-                            <span className={styles.modelStat}>{formatCompactNumber(stats.tokens)}</span>
+                            <span className={styles.modelStat}>
+                              {stats.tokenCoverageStatus === 'unknown'
+                                ? '--'
+                                : formatCompactNumber(stats.tokens)}
+                              {stats.tokenCoverageStatus !== 'complete' && (
+                                <span
+                                  className={getTokenCoverageClassName(
+                                    stats.tokenCoverageStatus
+                                  )}
+                                >
+                                  {t(getTokenCoverageLabelKey(stats.tokenCoverageStatus))}
+                                </span>
+                              )}
+                            </span>
                           </div>
                         ))}
                       </div>

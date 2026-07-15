@@ -11,7 +11,8 @@ import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import {
   formatCompactNumber,
   normalizeAuthIndex,
-  type ModelPrice,
+  formatUsd,
+  type ModelPriceOverrides,
 } from '@/utils/usage';
 import type { UsagePayload } from './hooks/useUsageData';
 import { CredentialUsageDetailsModal } from './CredentialUsageDetailsModal';
@@ -19,6 +20,7 @@ import {
   buildCredentialUsageRows,
   formatCredentialCostLabel,
   type CredentialCostStatus,
+  type CredentialTokenStats,
   type CredentialUsageRow,
 } from './credentialUsage';
 import styles from '@/pages/UsagePage.module.scss';
@@ -31,16 +33,39 @@ export interface CredentialStatsCardProps {
   codexConfigs: ProviderKeyConfig[];
   vertexConfigs: ProviderKeyConfig[];
   openaiProviders: OpenAIProviderConfig[];
-  modelPrices: Record<string, ModelPrice>;
-  hasPrices: boolean;
+  modelPrices: ModelPriceOverrides;
   requestWindow?: Pick<AuthUsageRequestsParams, 'from' | 'to'>;
 }
 
 const getCostStatusLabelKey = (status: CredentialCostStatus) => {
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
   return 'usage_stats.cost_status_complete';
 };
+
+const getCostStatusClassName = (status: CredentialCostStatus) => {
+  if (status === 'complete') return styles.costStatusComplete;
+  if (status === 'partial') return styles.costStatusPartial;
+  if (status === 'unknown_usage') return styles.costStatusUnknown;
+  return styles.costStatusUnconfigured;
+};
+
+const formatCostPart = (value: number | null): string => (value === null ? '--' : formatUsd(value));
+
+const formatCacheRatio = (value: number | null): string =>
+  value === null ? '--' : `${(value * 100).toFixed(1)}%`;
+
+const formatTokenPart = (value: number, hasKnownUsage: boolean): string =>
+  hasKnownUsage ? value.toLocaleString() : '--';
+
+const getTokenCoverageLabelKey = (status: CredentialTokenStats['usageCoverageStatus']) =>
+  status === 'partial'
+    ? 'usage_stats.token_coverage_partial'
+    : 'usage_stats.token_coverage_unknown';
+
+const getTokenCoverageClassName = (status: CredentialTokenStats['usageCoverageStatus']) =>
+  status === 'partial' ? styles.costStatusPartial : styles.costStatusUnknown;
 
 export function CredentialStatsCard({
   usage,
@@ -51,7 +76,6 @@ export function CredentialStatsCard({
   vertexConfigs,
   openaiProviders,
   modelPrices,
-  hasPrices,
   requestWindow,
 }: CredentialStatsCardProps) {
   const { t } = useTranslation();
@@ -125,27 +149,26 @@ export function CredentialStatsCard({
       ].join('|')
     : 'closed';
 
-  const hasTokenRows = rows.some((row) => row.tokens.totalTokens > 0);
-
   const renderCostCell = (row: CredentialUsageRow) => {
     const missingModelsLabel = row.cost.missingPriceModels.join(', ');
+    const missingComponentsLabel = row.cost.missingPriceComponents.join(', ');
+    const tooltip = [missingModelsLabel, missingComponentsLabel].filter(Boolean).join('\n');
     return (
       <span className={styles.credentialCostCell}>
         <span>{formatCredentialCostLabel(row.cost)}</span>
         <span
-          className={
-            row.cost.costStatus === 'complete'
-              ? styles.costStatusComplete
-              : row.cost.costStatus === 'partial'
-                ? styles.costStatusPartial
-                : styles.costStatusUnconfigured
-          }
-          title={missingModelsLabel || undefined}
+          className={getCostStatusClassName(row.cost.costStatus)}
+          title={tooltip || undefined}
         >
           {t(getCostStatusLabelKey(row.cost.costStatus))}
           {row.cost.missingPriceModels.length > 0
             ? ` · ${t('usage_stats.missing_price_models_count', {
                 count: row.cost.missingPriceModels.length,
+              })}`
+            : ''}
+          {row.cost.missingPriceComponents.length > 0
+            ? ` · ${t('usage_stats.missing_price_components_count', {
+                count: row.cost.missingPriceComponents.length,
               })}`
             : ''}
         </span>
@@ -160,9 +183,6 @@ export function CredentialStatsCard({
           <div className={styles.hint}>{t('common.loading')}</div>
         ) : rows.length > 0 ? (
           <div className={styles.detailsScroll}>
-            {!hasPrices && hasTokenRows && (
-              <div className={styles.detailsNote}>{t('usage_stats.cost_need_price')}</div>
-            )}
             <div className={styles.tableWrapper}>
               <table className={`${styles.table} ${styles.credentialStatsTable}`}>
                 <thead>
@@ -174,8 +194,12 @@ export function CredentialStatsCard({
                     <th>{t('usage_stats.output_tokens')}</th>
                     <th>{t('usage_stats.reasoning_tokens')}</th>
                     <th>{t('usage_stats.cached_tokens')}</th>
+                    <th>{t('usage_stats.cache_ratio')}</th>
                     <th>{t('usage_stats.total_tokens')}</th>
-                    <th>{t('usage_stats.estimated_cost')}</th>
+                    <th>{t('usage_stats.input_cost')}</th>
+                    <th>{t('usage_stats.output_cost')}</th>
+                    <th>{t('usage_stats.cache_cost')}</th>
+                    <th>{t('usage_stats.total_cost')}</th>
                     <th>{t('usage_stats.actions')}</th>
                   </tr>
                 </thead>
@@ -215,20 +239,39 @@ export function CredentialStatsCard({
                         </span>
                       </td>
                       <td className={styles.tokenNumberCell}>
-                        {row.tokens.inputTokens.toLocaleString()}
+                        {formatTokenPart(row.tokens.inputTokens, row.tokens.hasKnownUsage)}
                       </td>
                       <td className={styles.tokenNumberCell}>
-                        {row.tokens.outputTokens.toLocaleString()}
+                        {formatTokenPart(row.tokens.outputTokens, row.tokens.hasKnownUsage)}
                       </td>
                       <td className={styles.tokenNumberCell}>
-                        {row.tokens.reasoningTokens.toLocaleString()}
+                        {formatTokenPart(row.tokens.reasoningTokens, row.tokens.hasKnownUsage)}
                       </td>
                       <td className={styles.tokenNumberCell}>
-                        {row.tokens.cachedTokens.toLocaleString()}
+                        {formatTokenPart(row.tokens.cachedTokens, row.tokens.hasKnownUsage)}
                       </td>
                       <td className={styles.tokenNumberCell}>
-                        {row.tokens.totalTokens.toLocaleString()}
+                        {formatCacheRatio(row.tokens.cacheRatio)}
                       </td>
+                      <td className={styles.tokenNumberCell}>
+                        <span className={styles.credentialCostCell}>
+                          <span>
+                            {formatTokenPart(row.tokens.totalTokens, row.tokens.hasKnownUsage)}
+                          </span>
+                          {row.tokens.usageCoverageStatus !== 'complete' && (
+                            <span
+                              className={getTokenCoverageClassName(
+                                row.tokens.usageCoverageStatus
+                              )}
+                            >
+                              {t(getTokenCoverageLabelKey(row.tokens.usageCoverageStatus))}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td>{formatCostPart(row.cost.inputCostUsd)}</td>
+                      <td>{formatCostPart(row.cost.outputCostUsd)}</td>
+                      <td>{formatCostPart(row.cost.cacheCostUsd)}</td>
                       <td>{renderCostCell(row)}</td>
                       <td>
                         <Button

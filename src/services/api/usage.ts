@@ -1,5 +1,5 @@
 /**
- * 使用统计相关 API
+ * Usage statistics API helpers.
  */
 
 import { apiClient } from './client';
@@ -22,15 +22,22 @@ export interface UsageImportResponse {
   [key: string]: unknown;
 }
 
-export type CredentialCostStatus = 'complete' | 'partial' | 'unconfigured';
+export type CredentialCostStatus = 'unknown_usage' | 'unconfigured' | 'partial' | 'complete';
 
 export interface UsageTokenSummary {
   input_tokens?: number;
   output_tokens?: number;
   reasoning_tokens?: number;
   cached_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
   cache_tokens?: number;
   total_tokens?: number;
+  reported_total_tokens?: number;
+  computed_total_tokens?: number;
+  token_usage_source?: string;
+  cache_split_status?: string;
+  reasoning_cost_mode?: string;
   [key: string]: unknown;
 }
 
@@ -65,6 +72,7 @@ export interface UsageAuthSummary extends UsageTokenSummary {
   estimated_cost_usd?: number | null;
   cost_status?: CredentialCostStatus;
   missing_price_models?: string[];
+  missing_price_components?: string[];
   [key: string]: unknown;
 }
 
@@ -78,9 +86,15 @@ export interface AuthUsageRequestsParams {
 }
 
 export interface AuthUsageRequestItem {
+  request_id?: string;
+  client_ip?: string;
   timestamp: string;
   endpoint?: string;
   model: string;
+  provider?: string;
+  executor_type?: string;
+  auth_type?: string;
+  model_alias?: string;
   source: string;
   auth_index: string | number | null;
   failed: boolean;
@@ -110,23 +124,23 @@ const cleanAuthUsageRequestParams = (params: AuthUsageRequestsParams = {}) => {
 
 export const usageApi = {
   /**
-   * 获取使用统计原始数据
+   * Fetch raw usage statistics.
    */
   getUsage: () => apiClient.get<Record<string, unknown>>('/usage', { timeout: USAGE_TIMEOUT_MS }),
 
   /**
-   * 导出使用统计快照
+   * Export a usage statistics snapshot.
    */
   exportUsage: () => apiClient.get<UsageExportPayload>('/usage/export', { timeout: USAGE_TIMEOUT_MS }),
 
   /**
-   * 导入使用统计快照
+   * Import a usage statistics snapshot.
    */
   importUsage: (payload: unknown) =>
     apiClient.post<UsageImportResponse>('/usage/import', payload, { timeout: USAGE_TIMEOUT_MS }),
 
   /**
-   * 获取单个认证文件/凭证的请求明细
+   * Fetch request details for a single credential.
    */
   getAuthUsageRequests: (authIndex: string, params: AuthUsageRequestsParams = {}) =>
     apiClient.get<AuthUsageRequestsResponse>(
@@ -138,7 +152,7 @@ export const usageApi = {
     ),
 
   /**
-   * 计算密钥成功/失败统计，必要时会先获取 usage 数据
+   * Compute key success/failure stats, fetching usage first when needed.
    */
   async getKeyStats(usageData?: unknown): Promise<KeyStats> {
     let payload = usageData;
