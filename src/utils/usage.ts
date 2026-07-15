@@ -1,6 +1,6 @@
 /**
- * 使用统计相关工具
- * 迁移自基线 modules/usage.js 的纯逻辑部分
+ * Usage statistics utilities.
+ * Pure logic migrated from the baseline modules/usage.js implementation.
  */
 
 import type { ScriptableContext } from 'chart.js';
@@ -12,10 +12,64 @@ import {
   extractLatencyMs,
   finalizeLatencyStats,
 } from './usage/latency';
+import {
+  aggregateUsageCosts,
+  calculateUsageCost,
+  isCostUnresolved,
+  type ModelPriceOverrides,
+} from './usage/cost';
+import {
+  normalizeUsageDetail,
+  parseNonNegativeNumber,
+  resolveUsageCoverageStatus,
+  type CostStatus,
+  type NormalizedUsageCost,
+  type NormalizedUsageDetail,
+  type UsageCoverageStatus,
+} from './usage/normalization';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
 export type { DurationFormatOptions, LatencyStats } from './usage/latency';
+export type {
+  AggregateUsageCost,
+  ModelPrice,
+  ModelPriceOverrides,
+  PriceOption,
+  PriceKey,
+  PriceSource,
+  ResolvedModelPrice,
+  UserModelPriceOverride,
+} from './usage/cost';
+export {
+  aggregateUsageCosts,
+  buildPriceKey,
+  calculateUsageCost,
+  getPriceOptionsFromUsage,
+  hasAnyResolvedCost,
+  isCostUnresolved,
+  loadModelPrices,
+  resolveModelPrice,
+  saveModelPrices,
+} from './usage/cost';
+export type {
+  CacheSplitStatus,
+  CostStatus,
+  NormalizedUsageCost,
+  NormalizedUsageDetail,
+  NormalizedUsageTokens,
+  ReasoningCostMode,
+  TokenUsageSource,
+  UsageCoverageStatus,
+  UsageThinking,
+} from './usage/normalization';
+export {
+  normalizeUsageDetail,
+  normalizeUsageTokens,
+  parseNonNegativeNumber,
+  resolveUsageCoverageStatus,
+  resolveWindowUsageCoverageStatus,
+} from './usage/normalization';
 export {
   LATENCY_SOURCE_FIELD,
   LATENCY_SOURCE_UNIT,
@@ -39,13 +93,6 @@ export interface TokenBreakdown {
   reasoningTokens: number;
 }
 
-export interface UsageThinking {
-  intensity?: string;
-  mode?: string;
-  level?: string;
-  budget?: number;
-}
-
 export interface RateStats {
   rpm: number;
   tpm: number;
@@ -54,37 +101,8 @@ export interface RateStats {
   tokenCount: number;
 }
 
-export interface ModelPrice {
-  prompt: number;
-  completion: number;
-  cache: number;
-}
-
-export interface UsageDetail {
-  timestamp: string;
-  source: string;
-  auth_index: string | number | null;
-  latency_ms?: number;
-  tokens: {
-    input_tokens: number;
-    output_tokens: number;
-    reasoning_tokens: number;
-    cached_tokens: number;
-    cache_tokens?: number;
-    total_tokens: number;
-  };
-  thinking?: UsageThinking | null;
-  failed: boolean;
-  __modelName?: string;
-  __timestampMs?: number;
-}
-
-export interface UsageDetailWithEndpoint extends UsageDetail {
-  __endpoint: string;
-  __endpointMethod?: string;
-  __endpointPath?: string;
-  __timestampMs: number;
-}
+export type UsageDetail = NormalizedUsageDetail;
+export type UsageDetailWithEndpoint = NormalizedUsageDetail;
 
 export interface ApiStats {
   endpoint: string;
@@ -92,10 +110,22 @@ export interface ApiStats {
   successCount: number;
   failureCount: number;
   totalTokens: number;
-  totalCost: number;
+  tokenCoverageStatus: UsageCoverageStatus;
+  knownUsageCount: number;
+  unknownUsageCount: number;
+  totalCost: number | null;
+  costStatus: CostStatus;
+  missingPriceModels: string[];
+  missingPriceComponents: string[];
   models: Record<
     string,
-    { requests: number; successCount: number; failureCount: number; tokens: number }
+    {
+      requests: number;
+      successCount: number;
+      failureCount: number;
+      tokens: number;
+      tokenCoverageStatus: UsageCoverageStatus;
+    }
   >;
 }
 
@@ -105,15 +135,19 @@ export interface ModelStatsSummary {
   successCount: number;
   failureCount: number;
   tokens: number;
-  cost: number;
+  tokenCoverageStatus: UsageCoverageStatus;
+  knownUsageCount: number;
+  unknownUsageCount: number;
+  cost: number | null;
+  costStatus: CostStatus;
+  missingPriceModels: string[];
+  missingPriceComponents: string[];
   averageLatencyMs: number | null;
   latencySampleCount: number;
 }
 
 export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
 
-const TOKENS_PER_PRICE_UNIT = 1_000_000;
-const MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
 const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
   '7h': 7 * 60 * 60 * 1000,
@@ -128,29 +162,6 @@ const getApisRecord = (usageData: unknown): Record<string, unknown> | null => {
   const usageRecord = isRecord(usageData) ? usageData : null;
   const apisRaw = usageRecord ? usageRecord.apis : null;
   return isRecord(apisRaw) ? apisRaw : null;
-};
-
-const normalizeUsageThinking = (value: unknown): UsageThinking | null => {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const intensity = typeof value.intensity === 'string' ? value.intensity.trim() : '';
-  const mode = typeof value.mode === 'string' ? value.mode.trim() : '';
-  const level = typeof value.level === 'string' ? value.level.trim() : '';
-  const budget =
-    typeof value.budget === 'number' && Number.isFinite(value.budget) ? value.budget : undefined;
-
-  if (!intensity && !mode && !level && budget === undefined) {
-    return null;
-  }
-
-  return {
-    ...(intensity ? { intensity } : {}),
-    ...(mode ? { mode } : {}),
-    ...(level ? { level } : {}),
-    ...(budget !== undefined ? { budget } : {}),
-  };
 };
 
 interface UsageSummary {
@@ -422,7 +433,7 @@ export function buildCandidateUsageSourceIds(input: {
 }
 
 /**
- * 对使用数据中的敏感字段进行遮罩
+ * Mask sensitive fields in usage data.
  */
 export function maskUsageSensitiveValue(
   value: unknown,
@@ -477,7 +488,7 @@ export function maskUsageSensitiveValue(
 }
 
 /**
- * 格式化每分钟数值
+ * Format a per-minute value.
  */
 export function formatPerMinuteValue(value: number): string {
   const num = Number(value);
@@ -498,7 +509,7 @@ export function formatPerMinuteValue(value: number): string {
 }
 
 /**
- * 格式化紧凑数字
+ * Format a compact number.
  */
 export function formatCompactNumber(value: number): string {
   const num = Number(value);
@@ -516,17 +527,19 @@ export function formatCompactNumber(value: number): string {
 }
 
 /**
- * 格式化美元
+ * Format a USD amount.
  */
 export function formatUsd(value: number): string {
   const num = Number(value);
   if (!Number.isFinite(num)) {
     return '$0.00';
   }
-  const fixed = num.toFixed(2);
+  const abs = Math.abs(num);
+  const fractionDigits = abs > 0 && abs < 0.0001 ? 8 : abs > 0 && abs < 0.01 ? 6 : 2;
+  const fixed = num.toFixed(fractionDigits);
   const parts = Number(fixed).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   });
   return `$${parts}`;
 }
@@ -535,7 +548,7 @@ const usageDetailsCache = new WeakMap<object, UsageDetail[]>();
 const usageDetailsWithEndpointCache = new WeakMap<object, UsageDetailWithEndpoint[]>();
 
 /**
- * 从使用数据中收集所有请求明细
+ * Collect all request details from usage data.
  */
 export function collectUsageDetails(usageData: unknown): UsageDetail[] {
   const cacheKey = isRecord(usageData) ? (usageData as object) : null;
@@ -578,24 +591,12 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
 
       modelDetails.forEach((detailRaw) => {
         if (!isRecord(detailRaw) || typeof detailRaw.timestamp !== 'string') return;
-        const timestamp = detailRaw.timestamp;
-        const timestampMs = parseTimestampMs(timestamp);
-        const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
-        const latencyMs = extractLatencyMs(detailRaw);
-        details.push({
-          timestamp,
-          source: normalizeSource(detailRaw.source),
-          auth_index: (detailRaw?.auth_index ??
-            detailRaw?.authIndex ??
-            detailRaw?.AuthIndex ??
-            null) as UsageDetail['auth_index'],
-          latency_ms: latencyMs ?? undefined,
-          tokens: tokensRaw as unknown as UsageDetail['tokens'],
-          thinking: normalizeUsageThinking(detailRaw.thinking),
-          failed: detailRaw.failed === true,
-          __modelName: modelName,
-          __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
-        });
+        details.push(
+          normalizeUsageDetail(detailRaw, {
+            model: modelName,
+            sourceNormalizer: normalizeSource,
+          })
+        );
       });
     });
   });
@@ -607,7 +608,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
 }
 
 /**
- * 从使用数据中收集包含 endpoint/method/path 的请求明细
+ * Collect request details with endpoint/method/path metadata from usage data.
  */
 export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetailWithEndpoint[] {
   const cacheKey = isRecord(usageData) ? (usageData as object) : null;
@@ -655,27 +656,15 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
 
       modelDetails.forEach((detailRaw) => {
         if (!isRecord(detailRaw) || typeof detailRaw.timestamp !== 'string') return;
-        const timestamp = detailRaw.timestamp;
-        const timestampMs = parseTimestampMs(timestamp);
-        const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
-        const latencyMs = extractLatencyMs(detailRaw);
-        details.push({
-          timestamp,
-          source: normalizeSource(detailRaw.source),
-          auth_index: (detailRaw?.auth_index ??
-            detailRaw?.authIndex ??
-            detailRaw?.AuthIndex ??
-            null) as UsageDetail['auth_index'],
-          latency_ms: latencyMs ?? undefined,
-          tokens: tokensRaw as unknown as UsageDetail['tokens'],
-          thinking: normalizeUsageThinking(detailRaw.thinking),
-          failed: detailRaw.failed === true,
-          __modelName: modelName,
-          __endpoint: endpoint,
-          __endpointMethod: endpointMethod,
-          __endpointPath: endpointPath,
-          __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
-        });
+        details.push(
+          normalizeUsageDetail(detailRaw, {
+            model: modelName,
+            endpoint,
+            endpointMethod,
+            endpointPath,
+            sourceNormalizer: normalizeSource,
+          })
+        );
       });
     });
   });
@@ -687,35 +676,21 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
 }
 
 /**
- * 从单条明细提取总 tokens
+ * Extract total tokens from a single detail.
  */
 export function extractTotalTokens(detail: unknown): number {
-  const record = isRecord(detail) ? detail : null;
-  const tokensRaw = record?.tokens;
-  const tokens = isRecord(tokensRaw) ? tokensRaw : {};
-  if (typeof tokens.total_tokens === 'number') {
-    return tokens.total_tokens;
-  }
-  const inputTokens = typeof tokens.input_tokens === 'number' ? tokens.input_tokens : 0;
-  const outputTokens = typeof tokens.output_tokens === 'number' ? tokens.output_tokens : 0;
-  const reasoningTokens = typeof tokens.reasoning_tokens === 'number' ? tokens.reasoning_tokens : 0;
-  const cachedTokens = Math.max(
-    typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-    typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-  );
-
-  return inputTokens + outputTokens + reasoningTokens + cachedTokens;
+  return normalizeUsageDetail(detail).tokens.totalTokens;
 }
 
 /**
- * 计算耗时统计
+ * Calculate latency statistics.
  */
 export function calculateLatencyStats(usageData: unknown): LatencyStats {
   return calculateLatencyStatsFromDetails(collectUsageDetails(usageData));
 }
 
 /**
- * 计算 token 分类统计
+ * Calculate token category statistics.
  */
 export function calculateTokenBreakdown(usageData: unknown): TokenBreakdown {
   const details = collectUsageDetails(usageData);
@@ -727,21 +702,15 @@ export function calculateTokenBreakdown(usageData: unknown): TokenBreakdown {
   let reasoningTokens = 0;
 
   details.forEach((detail) => {
-    const tokens = detail.tokens;
-    cachedTokens += Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
-    if (typeof tokens.reasoning_tokens === 'number') {
-      reasoningTokens += tokens.reasoning_tokens;
-    }
+    cachedTokens += detail.tokens.cachedTokens;
+    reasoningTokens += detail.tokens.reasoningTokens;
   });
 
   return { cachedTokens, reasoningTokens };
 }
 
 /**
- * 计算最近 N 分钟的 RPM/TPM
+ * Calculate RPM/TPM for the most recent N-minute window.
  */
 export function calculateRecentPerMinuteRates(
   windowMinutes: number = 30,
@@ -782,7 +751,7 @@ export function calculateRecentPerMinuteRates(
 }
 
 /**
- * 从使用数据获取模型名称列表
+ * Get model names from usage data.
  */
 export function getModelNamesFromUsage(usageData: unknown): string[] {
   const apis = getApisRecord(usageData);
@@ -803,128 +772,36 @@ export function getModelNamesFromUsage(usageData: unknown): string[] {
 }
 
 /**
- * 计算成本数据
+ * Calculate cost data.
  */
 export function calculateCost(
   detail: UsageDetail,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): number {
-  const modelName = detail.__modelName || '';
-  const price = modelPrices[modelName];
-  if (!price) {
-    return 0;
-  }
-  const tokens = detail.tokens;
-  const rawInputTokens = Number(tokens.input_tokens);
-  const rawCompletionTokens = Number(tokens.output_tokens);
-  const rawCachedTokensPrimary = Number(tokens.cached_tokens);
-  const rawCachedTokensAlternate = Number(tokens.cache_tokens);
-
-  const inputTokens = Number.isFinite(rawInputTokens) ? Math.max(rawInputTokens, 0) : 0;
-  const completionTokens = Number.isFinite(rawCompletionTokens)
-    ? Math.max(rawCompletionTokens, 0)
-    : 0;
-  const cachedTokens = Math.max(
-    Number.isFinite(rawCachedTokensPrimary) ? Math.max(rawCachedTokensPrimary, 0) : 0,
-    Number.isFinite(rawCachedTokensAlternate) ? Math.max(rawCachedTokensAlternate, 0) : 0
-  );
-  const promptTokens = Math.max(inputTokens - cachedTokens, 0);
-
-  const promptCost = (promptTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.prompt) || 0);
-  const cachedCost = (cachedTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.cache) || 0);
-  const completionCost =
-    (completionTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.completion) || 0);
-  const total = promptCost + cachedCost + completionCost;
-  return Number.isFinite(total) && total > 0 ? total : 0;
+  return calculateUsageCost(detail, modelPrices).totalCostUsd ?? 0;
 }
 
 /**
- * 计算总成本
+ * Calculate total cost.
  */
 export function calculateTotalCost(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): number {
   const details = collectUsageDetails(usageData);
-  if (!details.length || !Object.keys(modelPrices).length) {
+  if (!details.length) {
     return 0;
   }
-  return details.reduce((sum, detail) => sum + calculateCost(detail, modelPrices), 0);
+  return aggregateUsageCosts(details.map((detail) => calculateUsageCost(detail, modelPrices)))
+    .totalCostUsd ?? 0;
 }
 
 /**
- * 从 localStorage 加载模型价格
- */
-export function loadModelPrices(): Record<string, ModelPrice> {
-  try {
-    if (typeof localStorage === 'undefined') {
-      return {};
-    }
-    const raw = localStorage.getItem(MODEL_PRICE_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) {
-      return {};
-    }
-    const normalized: Record<string, ModelPrice> = {};
-    Object.entries(parsed).forEach(([model, price]: [string, unknown]) => {
-      if (!model) return;
-      const priceRecord = isRecord(price) ? price : null;
-      const promptRaw = Number(priceRecord?.prompt);
-      const completionRaw = Number(priceRecord?.completion);
-      const cacheRaw = Number(priceRecord?.cache);
-
-      if (
-        !Number.isFinite(promptRaw) &&
-        !Number.isFinite(completionRaw) &&
-        !Number.isFinite(cacheRaw)
-      ) {
-        return;
-      }
-
-      const prompt = Number.isFinite(promptRaw) && promptRaw >= 0 ? promptRaw : 0;
-      const completion = Number.isFinite(completionRaw) && completionRaw >= 0 ? completionRaw : 0;
-      const cache =
-        Number.isFinite(cacheRaw) && cacheRaw >= 0
-          ? cacheRaw
-          : Number.isFinite(promptRaw) && promptRaw >= 0
-            ? promptRaw
-            : prompt;
-
-      normalized[model] = {
-        prompt,
-        completion,
-        cache,
-      };
-    });
-    return normalized;
-  } catch {
-    return {};
-  }
-}
-
-/**
- * 保存模型价格到 localStorage
- */
-export function saveModelPrices(prices: Record<string, ModelPrice>): void {
-  try {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    localStorage.setItem(MODEL_PRICE_STORAGE_KEY, JSON.stringify(prices));
-  } catch {
-    console.warn('保存模型价格失败');
-  }
-}
-
-/**
- * 获取 API 统计数据
+ * Get API statistics.
  */
 export function getApiStats(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): ApiStats[] {
   const apis = getApisRecord(usageData);
   if (!apis) return [];
@@ -934,11 +811,19 @@ export function getApiStats(
     if (!isRecord(apiData)) return;
     const models: Record<
       string,
-      { requests: number; successCount: number; failureCount: number; tokens: number }
+      {
+        requests: number;
+        successCount: number;
+        failureCount: number;
+        tokens: number;
+        tokenCoverageStatus: UsageCoverageStatus;
+      }
     > = {};
     let derivedSuccessCount = 0;
     let derivedFailureCount = 0;
-    let totalCost = 0;
+    const usageCosts: NormalizedUsageCost[] = [];
+    let knownUsageCount = 0;
+    let unknownUsageCount = 0;
 
     const modelsData = isRecord(apiData.models) ? apiData.models : {};
     Object.entries(modelsData).forEach(([modelName, modelData]) => {
@@ -949,13 +834,14 @@ export function getApiStats(
 
       let successCount = 0;
       let failureCount = 0;
+      let modelKnownUsageCount = 0;
+      let modelUnknownUsageCount = 0;
       if (hasExplicitCounts) {
         successCount += Number(modelData.success_count) || 0;
         failureCount += Number(modelData.failure_count) || 0;
       }
 
-      const price = modelPrices[modelName];
-      if (details.length > 0 && (!hasExplicitCounts || price)) {
+      if (details.length > 0) {
         details.forEach((detail) => {
           const detailRecord = isRecord(detail) ? detail : null;
           if (!hasExplicitCounts) {
@@ -966,20 +852,36 @@ export function getApiStats(
             }
           }
 
-          if (price && detailRecord) {
-            totalCost += calculateCost(
-              { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
-              modelPrices
-            );
+          if (detailRecord) {
+            const normalized = normalizeUsageDetail(detailRecord, {
+              model: modelName,
+              endpoint,
+            });
+            if (normalized.tokens.hasKnownUsage) {
+              modelKnownUsageCount += 1;
+              knownUsageCount += 1;
+            } else {
+              modelUnknownUsageCount += 1;
+              unknownUsageCount += 1;
+            }
+            usageCosts.push(calculateUsageCost(normalized, modelPrices));
           }
         });
       }
 
+      const modelTotalTokens = parseNonNegativeNumber(modelData.total_tokens) ?? 0;
+      const modelTokenCoverageStatus =
+        details.length > 0
+          ? resolveUsageCoverageStatus(modelKnownUsageCount, modelUnknownUsageCount)
+          : modelTotalTokens > 0
+            ? 'complete'
+            : 'unknown';
       models[modelName] = {
         requests: Number(modelData.total_requests) || 0,
         successCount,
         failureCount,
-        tokens: Number(modelData.total_tokens) || 0,
+        tokens: modelTotalTokens,
+        tokenCoverageStatus: modelTokenCoverageStatus,
       };
       derivedSuccessCount += successCount;
       derivedFailureCount += failureCount;
@@ -994,13 +896,27 @@ export function getApiStats(
       ? Number(apiData.failure_count) || 0
       : derivedFailureCount;
 
+    const costSummary = aggregateUsageCosts(usageCosts);
+    const totalTokens = parseNonNegativeNumber(apiData.total_tokens) ?? 0;
+    const tokenCoverageStatus =
+      knownUsageCount + unknownUsageCount > 0
+        ? resolveUsageCoverageStatus(knownUsageCount, unknownUsageCount)
+        : totalTokens > 0
+          ? 'complete'
+          : 'unknown';
     result.push({
       endpoint: maskUsageSensitiveValue(endpoint) || endpoint,
       totalRequests: Number(apiData.total_requests) || 0,
       successCount,
       failureCount,
-      totalTokens: Number(apiData.total_tokens) || 0,
-      totalCost,
+      totalTokens,
+      tokenCoverageStatus,
+      knownUsageCount,
+      unknownUsageCount,
+      totalCost: costSummary.totalCostUsd,
+      costStatus: costSummary.costStatus,
+      missingPriceModels: costSummary.missingPriceModels,
+      missingPriceComponents: costSummary.missingPriceComponents,
       models,
     });
   });
@@ -1009,11 +925,11 @@ export function getApiStats(
 }
 
 /**
- * 获取模型统计数据
+ * Get model statistics.
  */
 export function getModelStats(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): ModelStatsSummary[] {
   const apis = getApisRecord(usageData);
   if (!apis) return [];
@@ -1025,7 +941,9 @@ export function getModelStats(
       successCount: number;
       failureCount: number;
       tokens: number;
-      cost: number;
+      costs: NormalizedUsageCost[];
+      knownUsageCount: number;
+      unknownUsageCount: number;
       latency: LatencyAccumulator;
     }
   >();
@@ -1043,15 +961,15 @@ export function getModelStats(
         successCount: 0,
         failureCount: 0,
         tokens: 0,
-        cost: 0,
+        costs: [],
+        knownUsageCount: 0,
+        unknownUsageCount: 0,
         latency: createLatencyAccumulator(),
       };
       existing.requests += Number(modelData.total_requests) || 0;
-      existing.tokens += Number(modelData.total_tokens) || 0;
+      existing.tokens += parseNonNegativeNumber(modelData.total_tokens) ?? 0;
 
       const details = Array.isArray(modelData.details) ? modelData.details : [];
-
-      const price = modelPrices[modelName];
 
       const hasExplicitCounts =
         typeof modelData.success_count === 'number' || typeof modelData.failure_count === 'number';
@@ -1074,11 +992,14 @@ export function getModelStats(
 
           addLatencySample(existing.latency, latencyMs);
 
-          if (price && detailRecord) {
-            existing.cost += calculateCost(
-              { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
-              modelPrices
-            );
+          if (detailRecord) {
+            const normalized = normalizeUsageDetail(detailRecord, { model: modelName });
+            if (normalized.tokens.hasKnownUsage) {
+              existing.knownUsageCount += 1;
+            } else {
+              existing.unknownUsageCount += 1;
+            }
+            existing.costs.push(calculateUsageCost(normalized, modelPrices));
           }
         });
       }
@@ -1089,13 +1010,26 @@ export function getModelStats(
   return Array.from(modelMap.entries())
     .map(([model, stats]) => {
       const latencyStats = finalizeLatencyStats(stats.latency);
+      const costSummary = aggregateUsageCosts(stats.costs);
+      const tokenCoverageStatus =
+        stats.knownUsageCount + stats.unknownUsageCount > 0
+          ? resolveUsageCoverageStatus(stats.knownUsageCount, stats.unknownUsageCount)
+          : stats.tokens > 0
+            ? 'complete'
+            : 'unknown';
       return {
         model,
         requests: stats.requests,
         successCount: stats.successCount,
         failureCount: stats.failureCount,
         tokens: stats.tokens,
-        cost: stats.cost,
+        tokenCoverageStatus,
+        knownUsageCount: stats.knownUsageCount,
+        unknownUsageCount: stats.unknownUsageCount,
+        cost: costSummary.totalCostUsd,
+        costStatus: costSummary.costStatus,
+        missingPriceModels: costSummary.missingPriceModels,
+        missingPriceComponents: costSummary.missingPriceComponents,
         averageLatencyMs: latencyStats.averageMs,
         latencySampleCount: latencyStats.sampleCount,
       };
@@ -1104,7 +1038,7 @@ export function getModelStats(
 }
 
 /**
- * 格式化小时标签
+ * Format an hourly label.
  */
 export function formatHourLabel(date: Date): string {
   if (!(date instanceof Date)) {
@@ -1117,7 +1051,7 @@ export function formatHourLabel(date: Date): string {
 }
 
 /**
- * 格式化日期标签
+ * Format a daily label.
  */
 export function formatDayLabel(date: Date): string {
   if (!(date instanceof Date)) {
@@ -1130,17 +1064,22 @@ export function formatDayLabel(date: Date): string {
 }
 
 /**
- * 构建小时级别的数据序列
+ * Build an hourly data series.
  */
+export interface ModelUsageSeries {
+  labels: string[];
+  dataByModel: Map<string, number[]>;
+  coverageStatus: UsageCoverageStatus;
+  knownUsageCount: number;
+  unknownUsageCount: number;
+  hasData: boolean;
+}
+
 export function buildHourlySeriesByModel(
   usageData: unknown,
   metric: 'requests' | 'tokens' = 'requests',
   hourWindow: number = 24
-): {
-  labels: string[];
-  dataByModel: Map<string, number[]>;
-  hasData: boolean;
-} {
+): ModelUsageSeries {
   const hourMs = 60 * 60 * 1000;
   const resolvedHourWindow =
     Number.isFinite(hourWindow) && hourWindow > 0
@@ -1163,9 +1102,18 @@ export function buildHourlySeriesByModel(
   const details = collectUsageDetails(usageData);
   const dataByModel = new Map<string, number[]>();
   let hasData = false;
+  let knownUsageCount = 0;
+  let unknownUsageCount = 0;
 
   if (!details.length) {
-    return { labels, dataByModel, hasData };
+    return {
+      labels,
+      dataByModel,
+      coverageStatus: 'unknown',
+      knownUsageCount,
+      unknownUsageCount,
+      hasData,
+    };
   }
 
   details.forEach((detail) => {
@@ -1190,6 +1138,12 @@ export function buildHourlySeriesByModel(
       return;
     }
 
+    if (metric === 'tokens' && !detail.tokens.hasKnownUsage) {
+      unknownUsageCount += 1;
+      return;
+    }
+    knownUsageCount += 1;
+
     const modelName = detail.__modelName || 'Unknown';
     if (!dataByModel.has(modelName)) {
       dataByModel.set(modelName, new Array(labels.length).fill(0));
@@ -1204,27 +1158,42 @@ export function buildHourlySeriesByModel(
     hasData = true;
   });
 
-  return { labels, dataByModel, hasData };
+  return {
+    labels,
+    dataByModel,
+    coverageStatus:
+      metric === 'tokens'
+        ? resolveUsageCoverageStatus(knownUsageCount, unknownUsageCount)
+        : 'complete',
+    knownUsageCount,
+    unknownUsageCount,
+    hasData,
+  };
 }
 
 /**
- * 构建日级别的数据序列
+ * Build a daily data series.
  */
 export function buildDailySeriesByModel(
   usageData: unknown,
   metric: 'requests' | 'tokens' = 'requests'
-): {
-  labels: string[];
-  dataByModel: Map<string, number[]>;
-  hasData: boolean;
-} {
+): ModelUsageSeries {
   const details = collectUsageDetails(usageData);
   const valuesByModel = new Map<string, Map<string, number>>();
   const labelsSet = new Set<string>();
   let hasData = false;
+  let knownUsageCount = 0;
+  let unknownUsageCount = 0;
 
   if (!details.length) {
-    return { labels: [], dataByModel: new Map(), hasData };
+    return {
+      labels: [],
+      dataByModel: new Map(),
+      coverageStatus: 'unknown',
+      knownUsageCount,
+      unknownUsageCount,
+      hasData,
+    };
   }
 
   details.forEach((detail) => {
@@ -1239,6 +1208,12 @@ export function buildDailySeriesByModel(
     if (!dayLabel) {
       return;
     }
+
+    if (metric === 'tokens' && !detail.tokens.hasKnownUsage) {
+      unknownUsageCount += 1;
+      return;
+    }
+    knownUsageCount += 1;
 
     const modelName = detail.__modelName || 'Unknown';
     if (!valuesByModel.has(modelName)) {
@@ -1258,7 +1233,17 @@ export function buildDailySeriesByModel(
     dataByModel.set(modelName, series);
   });
 
-  return { labels, dataByModel, hasData };
+  return {
+    labels,
+    dataByModel,
+    coverageStatus:
+      metric === 'tokens'
+        ? resolveUsageCoverageStatus(knownUsageCount, unknownUsageCount)
+        : 'complete',
+    knownUsageCount,
+    unknownUsageCount,
+    hasData,
+  };
 }
 
 export interface ChartDataset {
@@ -1278,6 +1263,10 @@ export interface ChartDataset {
 export interface ChartData {
   labels: string[];
   datasets: ChartDataset[];
+  coverageStatus?: UsageCoverageStatus;
+  knownUsageCount?: number;
+  unknownUsageCount?: number;
+  hasData?: boolean;
 }
 
 const CHART_COLORS = [
@@ -1338,7 +1327,7 @@ const buildAreaGradient = (
 };
 
 /**
- * 构建图表数据
+ * Build chart data.
  */
 export function buildChartData(
   usageData: unknown,
@@ -1391,33 +1380,40 @@ export function buildChartData(
     };
   });
 
-  return { labels, datasets };
+  return {
+    labels,
+    datasets,
+    coverageStatus: baseSeries.coverageStatus,
+    knownUsageCount: baseSeries.knownUsageCount,
+    unknownUsageCount: baseSeries.unknownUsageCount,
+    hasData: baseSeries.hasData,
+  };
 }
 
 /**
- * 依据 usage 数据计算密钥使用统计
+ * Compute key usage stats from usage data.
  */
 /**
- * 状态栏单个格子的状态
+ * State for a single status bar block.
  */
 export type StatusBlockState = 'success' | 'failure' | 'mixed' | 'idle';
 
 /**
- * 状态栏单个格子的详细信息
+ * Details for a single status bar block.
  */
 export interface StatusBlockDetail {
   success: number;
   failure: number;
-  /** 该格子的成功率 (0–1)，无请求时为 -1 */
+  /** Success rate for this block (0-1), or -1 when there are no requests. */
   rate: number;
-  /** 格子起始时间戳 (ms) */
+  /** Block start timestamp in milliseconds. */
   startTime: number;
-  /** 格子结束时间戳 (ms) */
+  /** Block end timestamp in milliseconds. */
   endTime: number;
 }
 
 /**
- * 状态栏数据
+ * Status bar data.
  */
 export interface StatusBarData {
   blocks: StatusBlockState[];
@@ -1428,8 +1424,8 @@ export interface StatusBarData {
 }
 
 /**
- * 计算状态栏数据（最近200分钟，分为20个10分钟的时间块）
- * 每个时间块代表窗口内的一个等长区间，用于展示成功/失败趋势
+ * Calculate status bar data for the most recent 200 minutes as twenty 10-minute blocks.
+ * Each block is an equal interval in the window and displays success/failure trends.
  */
 export function calculateStatusBarData(
   usageDetails: UsageDetail[],
@@ -1530,8 +1526,8 @@ export function calculateStatusBarData(
 }
 
 /**
- * 服务健康监测数据（最近168小时/7天，7×96网格）
- * 每个格子代表15分钟的健康度
+ * Service health data for the most recent 168 hours / 7 days as a 7x96 grid.
+ * Each cell represents 15 minutes of health.
  */
 export interface ServiceHealthData {
   blocks: StatusBlockState[];
@@ -1733,11 +1729,16 @@ export type TokenCategory = 'input' | 'output' | 'cached' | 'reasoning';
 export interface TokenBreakdownSeries {
   labels: string[];
   dataByCategory: Record<TokenCategory, number[]>;
+  cacheRatioNumeratorTokens: number[];
+  cacheRatioDenominatorTokens: number[];
+  coverageStatus: UsageCoverageStatus;
+  knownUsageCount: number;
+  unknownUsageCount: number;
   hasData: boolean;
 }
 
 /**
- * 按 token 类别构建小时级别的堆叠序列
+ * Build hourly grouped series by token category. Cache and reasoning are overlapping detail dimensions.
  */
 export function buildHourlyTokenBreakdown(
   usageData: unknown,
@@ -1767,9 +1768,13 @@ export function buildHourlyTokenBreakdown(
     cached: new Array(labels.length).fill(0),
     reasoning: new Array(labels.length).fill(0),
   };
+  const cacheRatioNumeratorTokens = new Array(labels.length).fill(0);
+  const cacheRatioDenominatorTokens = new Array(labels.length).fill(0);
 
   const details = collectUsageDetails(usageData);
   let hasData = false;
+  let knownUsageCount = 0;
+  let unknownUsageCount = 0;
 
   details.forEach((detail) => {
     const timestamp =
@@ -1786,32 +1791,47 @@ export function buildHourlyTokenBreakdown(
     if (bucketIndex < 0 || bucketIndex >= labels.length) return;
 
     const tokens = detail.tokens;
-    const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
-    const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
-    const reasoning =
-      typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
-
-    dataByCategory.input[bucketIndex] += input;
-    dataByCategory.output[bucketIndex] += output;
-    dataByCategory.cached[bucketIndex] += cached;
-    dataByCategory.reasoning[bucketIndex] += reasoning;
+    if (!tokens.hasKnownUsage) {
+      unknownUsageCount += 1;
+      return;
+    }
+    knownUsageCount += 1;
+    dataByCategory.input[bucketIndex] += tokens.inputTokens;
+    dataByCategory.output[bucketIndex] += tokens.outputTokens;
+    dataByCategory.cached[bucketIndex] += tokens.cachedTokens;
+    dataByCategory.reasoning[bucketIndex] += tokens.reasoningTokens;
+    cacheRatioNumeratorTokens[bucketIndex] += tokens.cacheRatioNumeratorTokens;
+    cacheRatioDenominatorTokens[bucketIndex] += tokens.cacheRatioDenominatorTokens;
     hasData = true;
   });
 
-  return { labels, dataByCategory, hasData };
+  return {
+    labels,
+    dataByCategory,
+    cacheRatioNumeratorTokens,
+    cacheRatioDenominatorTokens,
+    coverageStatus: resolveUsageCoverageStatus(knownUsageCount, unknownUsageCount),
+    knownUsageCount,
+    unknownUsageCount,
+    hasData,
+  };
 }
 
 /**
- * 按 token 类别构建日级别的堆叠序列
+ * Build daily grouped series by token category. Cache and reasoning are overlapping detail dimensions.
  */
 export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeries {
   const details = collectUsageDetails(usageData);
-  const dayMap: Record<string, Record<TokenCategory, number>> = {};
+  const dayMap: Record<
+    string,
+    Record<TokenCategory, number> & {
+      cacheRatioNumeratorTokens: number;
+      cacheRatioDenominatorTokens: number;
+    }
+  > = {};
   let hasData = false;
+  let knownUsageCount = 0;
+  let unknownUsageCount = 0;
 
   details.forEach((detail) => {
     const timestamp =
@@ -1822,24 +1842,30 @@ export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeri
     const dayLabel = formatDayLabel(new Date(timestamp));
     if (!dayLabel) return;
 
+    const tokens = detail.tokens;
+    if (!tokens.hasKnownUsage) {
+      unknownUsageCount += 1;
+      return;
+    }
+    knownUsageCount += 1;
+
     if (!dayMap[dayLabel]) {
-      dayMap[dayLabel] = { input: 0, output: 0, cached: 0, reasoning: 0 };
+      dayMap[dayLabel] = {
+        input: 0,
+        output: 0,
+        cached: 0,
+        reasoning: 0,
+        cacheRatioNumeratorTokens: 0,
+        cacheRatioDenominatorTokens: 0,
+      };
     }
 
-    const tokens = detail.tokens;
-    const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
-    const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
-    const reasoning =
-      typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
-
-    dayMap[dayLabel].input += input;
-    dayMap[dayLabel].output += output;
-    dayMap[dayLabel].cached += cached;
-    dayMap[dayLabel].reasoning += reasoning;
+    dayMap[dayLabel].input += tokens.inputTokens;
+    dayMap[dayLabel].output += tokens.outputTokens;
+    dayMap[dayLabel].cached += tokens.cachedTokens;
+    dayMap[dayLabel].reasoning += tokens.reasoningTokens;
+    dayMap[dayLabel].cacheRatioNumeratorTokens += tokens.cacheRatioNumeratorTokens;
+    dayMap[dayLabel].cacheRatioDenominatorTokens += tokens.cacheRatioDenominatorTokens;
     hasData = true;
   });
 
@@ -1850,22 +1876,41 @@ export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeri
     cached: labels.map((l) => dayMap[l].cached),
     reasoning: labels.map((l) => dayMap[l].reasoning),
   };
+  const cacheRatioNumeratorTokens = labels.map(
+    (label) => dayMap[label].cacheRatioNumeratorTokens
+  );
+  const cacheRatioDenominatorTokens = labels.map(
+    (label) => dayMap[label].cacheRatioDenominatorTokens
+  );
 
-  return { labels, dataByCategory, hasData };
+  return {
+    labels,
+    dataByCategory,
+    cacheRatioNumeratorTokens,
+    cacheRatioDenominatorTokens,
+    coverageStatus: resolveUsageCoverageStatus(knownUsageCount, unknownUsageCount),
+    knownUsageCount,
+    unknownUsageCount,
+    hasData,
+  };
 }
 
 export interface CostSeries {
   labels: string[];
-  data: number[];
+  data: Array<number | null>;
+  costStatus: CostStatus;
+  coverageStatus: UsageCoverageStatus;
+  knownCostCount: number;
+  incompleteCostCount: number;
   hasData: boolean;
 }
 
 /**
- * 按小时构建费用时间序列
+ * Build an hourly cost time series.
  */
 export function buildHourlyCostSeries(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>,
+  modelPrices: ModelPriceOverrides,
   hourWindow: number = 24
 ): CostSeries {
   const hourMs = 60 * 60 * 1000;
@@ -1886,9 +1931,13 @@ export function buildHourlyCostSeries(
     labels.push(formatHourLabel(new Date(earliestTime + i * hourMs)));
   }
 
-  const data = new Array(labels.length).fill(0);
+  const data: Array<number | null> = new Array(labels.length).fill(0);
+  const hasUnresolvedCost = new Array(labels.length).fill(false);
   const details = collectUsageDetails(usageData);
+  const costs: NormalizedUsageCost[] = [];
   let hasData = false;
+  let knownCostCount = 0;
+  let incompleteCostCount = 0;
 
   details.forEach((detail) => {
     const timestamp =
@@ -1904,26 +1953,51 @@ export function buildHourlyCostSeries(
     const bucketIndex = Math.floor((bucketStart - earliestTime) / hourMs);
     if (bucketIndex < 0 || bucketIndex >= labels.length) return;
 
-    const cost = calculateCost(detail, modelPrices);
-    if (cost > 0) {
-      data[bucketIndex] += cost;
+    const cost = calculateUsageCost(detail, modelPrices);
+    costs.push(cost);
+    if (cost.costStatus !== 'complete') {
+      incompleteCostCount += 1;
+    }
+    if (cost.totalCostUsd !== null) {
+      knownCostCount += 1;
+      data[bucketIndex] = (data[bucketIndex] ?? 0) + cost.totalCostUsd;
       hasData = true;
+    } else if (isCostUnresolved(cost)) {
+      hasUnresolvedCost[bucketIndex] = true;
     }
   });
 
-  return { labels, data, hasData };
+  data.forEach((value, index) => {
+    if (hasUnresolvedCost[index] && value === 0) {
+      data[index] = null;
+    }
+  });
+
+  return {
+    labels,
+    data,
+    costStatus: aggregateUsageCosts(costs).costStatus,
+    coverageStatus: resolveUsageCoverageStatus(knownCostCount, incompleteCostCount),
+    knownCostCount,
+    incompleteCostCount,
+    hasData,
+  };
 }
 
 /**
- * 按天构建费用时间序列
+ * Build a daily cost time series.
  */
 export function buildDailyCostSeries(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): CostSeries {
   const details = collectUsageDetails(usageData);
   const dayMap: Record<string, number> = {};
+  const unresolvedDays = new Set<string>();
+  const costs: NormalizedUsageCost[] = [];
   let hasData = false;
+  let knownCostCount = 0;
+  let incompleteCostCount = 0;
 
   details.forEach((detail) => {
     const timestamp =
@@ -1934,15 +2008,32 @@ export function buildDailyCostSeries(
     const dayLabel = formatDayLabel(new Date(timestamp));
     if (!dayLabel) return;
 
-    const cost = calculateCost(detail, modelPrices);
-    if (cost > 0) {
-      dayMap[dayLabel] = (dayMap[dayLabel] || 0) + cost;
+    const cost = calculateUsageCost(detail, modelPrices);
+    costs.push(cost);
+    if (cost.costStatus !== 'complete') {
+      incompleteCostCount += 1;
+    }
+    if (cost.totalCostUsd !== null) {
+      knownCostCount += 1;
+      dayMap[dayLabel] = (dayMap[dayLabel] || 0) + cost.totalCostUsd;
       hasData = true;
+    } else if (isCostUnresolved(cost)) {
+      unresolvedDays.add(dayLabel);
     }
   });
 
-  const labels = Object.keys(dayMap).sort();
-  const data = labels.map((l) => dayMap[l]);
+  const labels = Array.from(new Set([...Object.keys(dayMap), ...unresolvedDays])).sort();
+  const data = labels.map((label) =>
+    unresolvedDays.has(label) && !dayMap[label] ? null : (dayMap[label] ?? 0)
+  );
 
-  return { labels, data, hasData };
+  return {
+    labels,
+    data,
+    costStatus: aggregateUsageCosts(costs).costStatus,
+    coverageStatus: resolveUsageCoverageStatus(knownCostCount, incompleteCostCount),
+    knownCostCount,
+    incompleteCostCount,
+    hasData,
+  };
 }

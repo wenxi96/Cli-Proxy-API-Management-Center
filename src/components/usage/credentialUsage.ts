@@ -12,13 +12,18 @@ import {
   type SourceInfoMap,
 } from '@/utils/sourceResolver';
 import {
-  calculateCost,
+  aggregateUsageCosts,
+  calculateUsageCost,
   collectUsageDetails,
   extractLatencyMs,
   formatUsd,
+  normalizeUsageDetail,
+  normalizeUsageTokens,
   normalizeAuthIndex,
   normalizeUsageSourceId,
-  type ModelPrice,
+  resolveUsageCoverageStatus,
+  type ModelPriceOverrides,
+  type UsageCoverageStatus,
   type UsageDetail,
 } from '@/utils/usage';
 
@@ -28,14 +33,29 @@ export interface CredentialTokenStats {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   cachedTokens: number;
   totalTokens: number;
+  reportedTotalTokens: number | null;
+  computedTotalTokens: number;
+  cacheRatio: number | null;
+  cacheRatioNumeratorTokens: number;
+  cacheRatioDenominatorTokens: number;
+  hasKnownUsage: boolean;
+  usageCoverageStatus: UsageCoverageStatus;
+  knownUsageCount: number;
+  unknownUsageCount: number;
 }
 
 export interface CredentialCostSummary {
-  estimatedCostUsd: number | null;
+  inputCostUsd: number | null;
+  outputCostUsd: number | null;
+  cacheCostUsd: number | null;
+  totalCostUsd: number | null;
   costStatus: CredentialCostStatus;
   missingPriceModels: string[];
+  missingPriceComponents: string[];
 }
 
 export interface CredentialUsageRequestRow {
@@ -73,15 +93,26 @@ export interface CredentialUsageRow {
 export interface CredentialUsageBuildContext {
   sourceInfoMap: SourceInfoMap;
   authFileMap: Map<string, CredentialInfo>;
-  modelPrices: Record<string, ModelPrice>;
+  modelPrices: ModelPriceOverrides;
 }
 
 const EMPTY_TOKENS: CredentialTokenStats = {
   inputTokens: 0,
   outputTokens: 0,
   reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0,
   cachedTokens: 0,
   totalTokens: 0,
+  reportedTotalTokens: null,
+  computedTotalTokens: 0,
+  cacheRatio: null,
+  cacheRatioNumeratorTokens: 0,
+  cacheRatioDenominatorTokens: 0,
+  hasKnownUsage: false,
+  usageCoverageStatus: 'unknown',
+  knownUsageCount: 0,
+  unknownUsageCount: 0,
 };
 
 const UNKNOWN_MODEL = '-';
@@ -92,36 +123,26 @@ const toNumber = (value: unknown): number => {
   return Math.max(parsed, 0);
 };
 
-const readTokenSource = (value: unknown): Record<string, unknown> => {
-  if (!isRecord(value)) return {};
-  const tokens = isRecord(value.tokens) ? value.tokens : value;
-  return tokens;
-};
-
 export function normalizeCredentialTokenStats(value: unknown): CredentialTokenStats {
-  const tokens = readTokenSource(value);
-  const inputTokens = toNumber(tokens.input_tokens ?? tokens.inputTokens);
-  const outputTokens = toNumber(tokens.output_tokens ?? tokens.outputTokens);
-  const reasoningTokens = toNumber(tokens.reasoning_tokens ?? tokens.reasoningTokens);
-  const cachedTokens = Math.max(
-    toNumber(tokens.cached_tokens ?? tokens.cachedTokens),
-    toNumber(tokens.cache_tokens ?? tokens.cacheTokens)
-  );
-
-  const explicitTotal = tokens.total_tokens ?? tokens.totalTokens;
-  const totalTokens =
-    explicitTotal !== undefined && explicitTotal !== null
-      ? toNumber(explicitTotal)
-      : inputTokens + outputTokens + reasoningTokens > 0
-        ? inputTokens + outputTokens + reasoningTokens
-        : cachedTokens;
+  const tokens = normalizeUsageTokens(value);
 
   return {
-    inputTokens,
-    outputTokens,
-    reasoningTokens,
-    cachedTokens,
-    totalTokens,
+    inputTokens: tokens.inputTokens,
+    outputTokens: tokens.outputTokens,
+    reasoningTokens: tokens.reasoningTokens,
+    cacheReadTokens: tokens.cacheReadTokens,
+    cacheCreationTokens: tokens.cacheCreationTokens,
+    cachedTokens: tokens.cachedTokens,
+    totalTokens: tokens.totalTokens,
+    reportedTotalTokens: tokens.reportedTotalTokens,
+    computedTotalTokens: tokens.computedTotalTokens,
+    cacheRatio: tokens.cacheRatio,
+    cacheRatioNumeratorTokens: tokens.cacheRatioNumeratorTokens,
+    cacheRatioDenominatorTokens: tokens.cacheRatioDenominatorTokens,
+    hasKnownUsage: tokens.hasKnownUsage,
+    usageCoverageStatus: tokens.hasKnownUsage ? 'complete' : 'unknown',
+    knownUsageCount: tokens.hasKnownUsage ? 1 : 0,
+    unknownUsageCount: tokens.hasKnownUsage ? 0 : 1,
   };
 }
 
@@ -132,71 +153,59 @@ export const addCredentialTokenStats = (
   inputTokens: current.inputTokens + addition.inputTokens,
   outputTokens: current.outputTokens + addition.outputTokens,
   reasoningTokens: current.reasoningTokens + addition.reasoningTokens,
+  cacheReadTokens: current.cacheReadTokens + addition.cacheReadTokens,
+  cacheCreationTokens: current.cacheCreationTokens + addition.cacheCreationTokens,
   cachedTokens: current.cachedTokens + addition.cachedTokens,
   totalTokens: current.totalTokens + addition.totalTokens,
+  reportedTotalTokens: null,
+  computedTotalTokens: current.computedTotalTokens + addition.computedTotalTokens,
+  cacheRatio:
+    current.cacheRatioDenominatorTokens + addition.cacheRatioDenominatorTokens > 0
+      ? (current.cacheRatioNumeratorTokens + addition.cacheRatioNumeratorTokens) /
+        (current.cacheRatioDenominatorTokens + addition.cacheRatioDenominatorTokens)
+      : null,
+  cacheRatioNumeratorTokens:
+    current.cacheRatioNumeratorTokens + addition.cacheRatioNumeratorTokens,
+  cacheRatioDenominatorTokens:
+    current.cacheRatioDenominatorTokens + addition.cacheRatioDenominatorTokens,
+  hasKnownUsage: current.hasKnownUsage || addition.hasKnownUsage,
+  usageCoverageStatus: resolveUsageCoverageStatus(
+    current.knownUsageCount + addition.knownUsageCount,
+    current.unknownUsageCount + addition.unknownUsageCount
+  ),
+  knownUsageCount: current.knownUsageCount + addition.knownUsageCount,
+  unknownUsageCount: current.unknownUsageCount + addition.unknownUsageCount,
 });
 
 const hasTokenSignal = (tokens: CredentialTokenStats): boolean =>
-  tokens.inputTokens > 0 ||
-  tokens.outputTokens > 0 ||
-  tokens.reasoningTokens > 0 ||
-  tokens.cachedTokens > 0 ||
-  tokens.totalTokens > 0;
+  tokens.hasKnownUsage;
 
 export function summarizeCredentialCostCoverage(
   details: UsageDetail[],
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): CredentialCostSummary {
-  let estimatedCostUsd = 0;
-  let pricedCount = 0;
-  let unpricedCount = 0;
-  const missingModels = new Set<string>();
-
-  details.forEach((detail) => {
-    const tokens = normalizeCredentialTokenStats(detail.tokens);
-    if (!hasTokenSignal(tokens)) {
-      return;
-    }
-
-    const model = (detail.__modelName || UNKNOWN_MODEL).trim() || UNKNOWN_MODEL;
-    if (modelPrices[model]) {
-      pricedCount += 1;
-      estimatedCostUsd += calculateCost(detail, modelPrices);
-      return;
-    }
-
-    unpricedCount += 1;
-    missingModels.add(model);
-  });
-
-  if (pricedCount === 0 && unpricedCount > 0) {
-    return {
-      estimatedCostUsd: null,
-      costStatus: 'unconfigured',
-      missingPriceModels: Array.from(missingModels).sort((a, b) => a.localeCompare(b)),
-    };
-  }
-
-  if (pricedCount > 0 && unpricedCount > 0) {
-    return {
-      estimatedCostUsd,
-      costStatus: 'partial',
-      missingPriceModels: Array.from(missingModels).sort((a, b) => a.localeCompare(b)),
-    };
-  }
-
+  const costs = details.map((detail) => calculateUsageCost(detail, modelPrices));
+  const aggregate = aggregateUsageCosts(costs);
   return {
-    estimatedCostUsd,
-    costStatus: 'complete',
-    missingPriceModels: [],
+    inputCostUsd: aggregate.inputCostUsd,
+    outputCostUsd: aggregate.outputCostUsd,
+    cacheCostUsd: aggregate.cacheCostUsd,
+    totalCostUsd: aggregate.totalCostUsd,
+    costStatus: aggregate.costStatus,
+    missingPriceModels: aggregate.missingPriceModels,
+    missingPriceComponents: aggregate.missingPriceComponents,
   };
 }
 
 export function formatCredentialCostLabel(cost: CredentialCostSummary): string {
-  if (cost.costStatus === 'unconfigured' || cost.estimatedCostUsd === null) {
+  if (
+    cost.costStatus === 'unknown_usage' ||
+    cost.costStatus === 'unconfigured' ||
+    cost.totalCostUsd === null
+  ) {
     return '--';
   }
-  return formatUsd(cost.estimatedCostUsd);
+  return formatUsd(cost.totalCostUsd);
 }
 
 const normalizeBackendSource = (value: unknown): string => {
@@ -238,20 +247,24 @@ const toUsageDetailForCost = (
   model: string,
   tokens: CredentialTokenStats,
   timestamp = ''
-): UsageDetail => ({
-  timestamp,
-  source: '',
-  auth_index: null,
-  tokens: {
-    input_tokens: tokens.inputTokens,
-    output_tokens: tokens.outputTokens,
-    reasoning_tokens: tokens.reasoningTokens,
-    cached_tokens: tokens.cachedTokens,
-    total_tokens: tokens.totalTokens,
-  },
-  failed: false,
-  __modelName: model,
-});
+): UsageDetail =>
+  normalizeUsageDetail(
+    {
+      timestamp,
+      model,
+      tokens: {
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens,
+        reasoningTokens: tokens.reasoningTokens,
+        cacheReadTokens: tokens.cacheReadTokens,
+        cacheCreationTokens: tokens.cacheCreationTokens,
+        cachedTokens: tokens.cachedTokens,
+        totalTokens: tokens.totalTokens,
+      },
+      failed: false,
+    },
+    { model }
+  );
 
 const buildRequestRowFromUsageDetail = (
   detail: UsageDetail,
@@ -277,7 +290,7 @@ const buildRequestRowFromUsageDetail = (
     id: `${timestamp}-${model}-${sourceKey}-${index}`,
     timestamp,
     timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
-    endpoint: '',
+    endpoint: detail.endpoint || detail.__endpoint || '',
     model,
     source: sourceInfo.displayName,
     sourceType: sourceInfo.type,
@@ -319,9 +332,14 @@ export function buildCredentialRequestRowsFromAuthItems(
         ? `auth:${authIndex}`
         : (sourceInfo.identityKey ?? `source:${source || sourceInfo.displayName}`);
       const model = (item.model || UNKNOWN_MODEL).trim() || UNKNOWN_MODEL;
-      const tokens = normalizeCredentialTokenStats(item.tokens);
+      const normalized = normalizeUsageDetail(item, {
+        model,
+        endpoint: item.endpoint || '',
+        sourceNormalizer: normalizeBackendSource,
+      });
+      const tokens = normalizeCredentialTokenStats(normalized.tokens);
       const cost = summarizeCredentialCostCoverage(
-        [toUsageDetailForCost(model, tokens, timestamp)],
+        [normalized],
         context.modelPrices
       );
       const latencyRaw = Number(item.latency_ms);
@@ -376,7 +394,7 @@ const createAccumulator = (
 
 const finalizeAccumulator = (
   accumulator: CredentialAccumulator,
-  modelPrices: Record<string, ModelPrice>,
+  modelPrices: ModelPriceOverrides,
   usesBackendAggregate: boolean
 ): CredentialUsageRow => {
   const total = accumulator.success + accumulator.failure;
@@ -517,7 +535,8 @@ export function buildCredentialUsageRows(
       const failure = getFailureCount(summary);
       const success = getSuccessCount(summary, totalHint, failure);
       const total = getTotalRequests(summary, success, failure);
-      const tokens = getBackendSummaryTokens(summary);
+      const backendTokens = getBackendSummaryTokens(summary);
+      const tokens = local ? local.tokens : backendTokens;
       const costDetails = local?.costDetails.length
         ? local.costDetails
         : buildCostDetailsFromBackendSummary(summary);
@@ -552,7 +571,7 @@ export function buildCredentialUsageRows(
 export function buildDefaultCredentialUsageContext(
   input: Parameters<typeof buildSourceInfoMap>[0],
   authFileMap: Map<string, CredentialInfo>,
-  modelPrices: Record<string, ModelPrice>
+  modelPrices: ModelPriceOverrides
 ): CredentialUsageBuildContext {
   return {
     sourceInfoMap: buildSourceInfoMap(input),

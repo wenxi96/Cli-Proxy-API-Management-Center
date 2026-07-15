@@ -37,9 +37,11 @@ import {
   useChartData,
 } from '@/components/usage';
 import {
+  collectUsageDetails,
   getModelNamesFromUsage,
   getApiStats,
   getModelStats,
+  getPriceOptionsFromUsage,
   filterUsageByTimeRange,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -234,10 +236,11 @@ export function UsagePage() {
   }, [timeRange]);
 
   const nowMs = lastRefreshedAt?.getTime() ?? 0;
+  const allUsageDetails = useMemo(() => (usage ? collectUsageDetails(usage) : []), [usage]);
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
-    useSparklines({ usage: filteredUsage, loading, nowMs });
+    useSparklines({ usage: filteredUsage, loading, nowMs, modelPrices });
 
   // Chart data hook
   const {
@@ -261,7 +264,11 @@ export function UsagePage() {
     () => getModelStats(filteredUsage, modelPrices),
     [filteredUsage, modelPrices]
   );
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const hasPrices = Boolean(filteredUsage);
+  const priceOptions = useMemo(
+    () => getPriceOptionsFromUsage(allUsageDetails, modelPrices),
+    [allUsageDetails, modelPrices]
+  );
 
   return (
     <div className={styles.container}>
@@ -414,6 +421,7 @@ export function UsagePage() {
         codexConfigs={config?.codexApiKeys || []}
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={openaiProvidersForUsage}
+        modelPrices={modelPrices}
       />
 
       {/* Credential Stats */}
@@ -426,13 +434,12 @@ export function UsagePage() {
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={openaiProvidersForUsage}
         modelPrices={modelPrices}
-        hasPrices={hasPrices}
         requestWindow={credentialRequestWindow}
       />
 
       {/* Price Settings */}
       <PriceSettingsCard
-        modelNames={modelNames}
+        priceOptions={priceOptions}
         modelPrices={modelPrices}
         onPricesChange={setModelPrices}
       />

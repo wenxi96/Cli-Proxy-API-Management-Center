@@ -10,6 +10,28 @@ import {
 } from '@/utils/usage';
 import styles from '@/pages/UsagePage.module.scss';
 
+const getCostStatusLabelKey = (status: ModelStatsSummary['costStatus']) => {
+  if (status === 'complete') return 'usage_stats.cost_status_complete';
+  if (status === 'partial') return 'usage_stats.cost_status_partial';
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  return 'usage_stats.cost_status_unconfigured';
+};
+
+const getCostStatusClassName = (status: ModelStatsSummary['costStatus']) => {
+  if (status === 'complete') return styles.costStatusComplete;
+  if (status === 'partial') return styles.costStatusPartial;
+  if (status === 'unknown_usage') return styles.costStatusUnknown;
+  return styles.costStatusUnconfigured;
+};
+
+const getTokenCoverageLabelKey = (status: ModelStatsSummary['tokenCoverageStatus']) =>
+  status === 'partial'
+    ? 'usage_stats.token_coverage_partial'
+    : 'usage_stats.token_coverage_unknown';
+
+const getTokenCoverageClassName = (status: ModelStatsSummary['tokenCoverageStatus']) =>
+  status === 'partial' ? styles.costStatusPartial : styles.costStatusUnknown;
+
 export type ModelStat = ModelStatsSummary;
 
 export interface ModelStatsCardProps {
@@ -171,7 +193,20 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                           </span>
                         </span>
                       </td>
-                      <td>{formatCompactNumber(stat.tokens)}</td>
+                      <td>
+                        <span>
+                          {stat.tokenCoverageStatus === 'unknown'
+                            ? '--'
+                            : formatCompactNumber(stat.tokens)}
+                        </span>
+                        {stat.tokenCoverageStatus !== 'complete' && (
+                          <span
+                            className={getTokenCoverageClassName(stat.tokenCoverageStatus)}
+                          >
+                            {t(getTokenCoverageLabelKey(stat.tokenCoverageStatus))}
+                          </span>
+                        )}
+                      </td>
                       <td className={styles.durationCell}>
                         {formatDurationMs(stat.averageLatencyMs)}
                       </td>
@@ -188,7 +223,24 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                           {stat.successRate.toFixed(1)}%
                         </span>
                       </td>
-                      {hasPrices && <td>{stat.cost > 0 ? formatUsd(stat.cost) : '--'}</td>}
+                      {hasPrices && (
+                        <td>
+                          <span>{stat.cost === null ? '--' : formatUsd(stat.cost)}</span>
+                          {stat.costStatus !== 'complete' && (
+                            <span
+                              className={getCostStatusClassName(stat.costStatus)}
+                              title={[
+                                stat.missingPriceModels.join(', '),
+                                stat.missingPriceComponents.join(', '),
+                              ]
+                                .filter(Boolean)
+                                .join('\n')}
+                            >
+                              {t(getCostStatusLabelKey(stat.costStatus))}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

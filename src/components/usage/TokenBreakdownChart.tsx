@@ -46,7 +46,7 @@ export function TokenBreakdownChart({
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
-  const { chartData, chartOptions } = useMemo(() => {
+  const { chartData, chartOptions, coverageStatus, hasData, unknownUsageCount } = useMemo(() => {
     const series =
       period === 'hour'
         ? buildHourlyTokenBreakdown(usage, hourWindowHours)
@@ -105,9 +105,14 @@ export function TokenBreakdownChart({
               let text = `${context.dataset.label}: ${formatTokens(val)}`;
 
               if (cat === 'cached') {
-                const inputVal = Number(series.dataByCategory.input[context.dataIndex]) || 0;
-                if (inputVal > 0) {
-                  const perc = ((val / inputVal) * 100).toFixed(2);
+                const denominator = Number(
+                  series.cacheRatioDenominatorTokens[context.dataIndex]
+                ) || 0;
+                const numerator = Number(
+                  series.cacheRatioNumeratorTokens[context.dataIndex]
+                ) || 0;
+                if (denominator > 0) {
+                  const perc = ((numerator / denominator) * 100).toFixed(2);
                   text += ` (${perc}%)`;
                 }
               }
@@ -118,7 +123,13 @@ export function TokenBreakdownChart({
       },
     };
 
-    return { chartData: data, chartOptions: options };
+    return {
+      chartData: data,
+      chartOptions: options,
+      coverageStatus: series.coverageStatus,
+      hasData: series.hasData,
+      unknownUsageCount: series.unknownUsageCount,
+    };
   }, [usage, period, isDark, isMobile, hourWindowHours, t]);
   const labels = chartData.labels ?? [];
 
@@ -146,8 +157,13 @@ export function TokenBreakdownChart({
     >
       {loading ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : labels.length > 0 ? (
+      ) : hasData && labels.length > 0 ? (
         <div className={styles.chartWrapper}>
+          {coverageStatus === 'partial' && (
+            <div className={styles.tokenCoverageNotice}>
+              {t('usage_stats.token_coverage_partial')}
+            </div>
+          )}
           <div className={styles.chartLegend} aria-label="Chart legend">
             {chartData.datasets.map((dataset, index) => (
               <div
@@ -178,6 +194,8 @@ export function TokenBreakdownChart({
             </div>
           </div>
         </div>
+      ) : unknownUsageCount > 0 ? (
+        <div className={styles.hint}>{t('usage_stats.token_coverage_unknown')}</div>
       ) : (
         <div className={styles.hint}>{t('usage_stats.no_data')}</div>
       )}

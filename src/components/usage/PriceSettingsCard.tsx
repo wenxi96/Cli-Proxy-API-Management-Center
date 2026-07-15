@@ -1,176 +1,219 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
-import type { ModelPrice } from '@/utils/usage';
+import type {
+  ModelPriceOverrides,
+  PriceKey,
+  PriceOption,
+  PriceSource,
+} from '@/utils/usage';
+import {
+  buildPriceOverride,
+  EMPTY_PRICE_FORM,
+  priceOptionToFormState,
+  type PriceFormState,
+} from '@/utils/usage/priceForm';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface PriceSettingsCardProps {
-  modelNames: string[];
-  modelPrices: Record<string, ModelPrice>;
-  onPricesChange: (prices: Record<string, ModelPrice>) => void;
+  priceOptions: PriceOption[];
+  modelPrices: ModelPriceOverrides;
+  onPricesChange: (prices: ModelPriceOverrides) => void;
 }
 
+const getSourceLabelKey = (source: PriceSource) => {
+  if (source === 'official_default') return 'usage_stats.price_source_official';
+  if (source === 'user_override') return 'usage_stats.price_source_override';
+  if (source === 'legacy_fallback') return 'usage_stats.price_source_legacy';
+  return 'usage_stats.price_source_unconfigured';
+};
+
+const formatUsdPer1M = (value: number | undefined): string =>
+  typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(4)}/1M` : '--';
+
 export function PriceSettingsCard({
-  modelNames,
+  priceOptions,
   modelPrices,
-  onPricesChange
+  onPricesChange,
 }: PriceSettingsCardProps) {
   const { t } = useTranslation();
+  const [selectedKey, setSelectedKey] = useState<PriceKey | ''>('');
+  const [form, setForm] = useState<PriceFormState>(EMPTY_PRICE_FORM);
+  const [editKey, setEditKey] = useState<PriceKey | null>(null);
+  const [editForm, setEditForm] = useState<PriceFormState>(EMPTY_PRICE_FORM);
 
-  // Add form state
-  const [selectedModel, setSelectedModel] = useState('');
-  const [promptPrice, setPromptPrice] = useState('');
-  const [completionPrice, setCompletionPrice] = useState('');
-  const [cachePrice, setCachePrice] = useState('');
-
-  // Edit modal state
-  const [editModel, setEditModel] = useState<string | null>(null);
-  const [editPrompt, setEditPrompt] = useState('');
-  const [editCompletion, setEditCompletion] = useState('');
-  const [editCache, setEditCache] = useState('');
-
-  const handleSavePrice = () => {
-    if (!selectedModel) return;
-    const prompt = parseFloat(promptPrice) || 0;
-    const completion = parseFloat(completionPrice) || 0;
-    const cache = cachePrice.trim() === '' ? prompt : parseFloat(cachePrice) || 0;
-    const newPrices = { ...modelPrices, [selectedModel]: { prompt, completion, cache } };
-    onPricesChange(newPrices);
-    setSelectedModel('');
-    setPromptPrice('');
-    setCompletionPrice('');
-    setCachePrice('');
-  };
-
-  const handleDeletePrice = (model: string) => {
-    const newPrices = { ...modelPrices };
-    delete newPrices[model];
-    onPricesChange(newPrices);
-  };
-
-  const handleOpenEdit = (model: string) => {
-    const price = modelPrices[model];
-    setEditModel(model);
-    setEditPrompt(price?.prompt?.toString() || '');
-    setEditCompletion(price?.completion?.toString() || '');
-    setEditCache(price?.cache?.toString() || '');
-  };
-
-  const handleSaveEdit = () => {
-    if (!editModel) return;
-    const prompt = parseFloat(editPrompt) || 0;
-    const completion = parseFloat(editCompletion) || 0;
-    const cache = editCache.trim() === '' ? prompt : parseFloat(editCache) || 0;
-    const newPrices = { ...modelPrices, [editModel]: { prompt, completion, cache } };
-    onPricesChange(newPrices);
-    setEditModel(null);
-  };
-
-  const handleModelSelect = (value: string) => {
-    setSelectedModel(value);
-    const price = modelPrices[value];
-    if (price) {
-      setPromptPrice(price.prompt.toString());
-      setCompletionPrice(price.completion.toString());
-      setCachePrice(price.cache.toString());
-    } else {
-      setPromptPrice('');
-      setCompletionPrice('');
-      setCachePrice('');
-    }
-  };
+  const optionByKey = useMemo(
+    () => new Map(priceOptions.map((option) => [option.key, option])),
+    [priceOptions]
+  );
 
   const options = useMemo(
     () => [
       { value: '', label: t('usage_stats.model_price_select_placeholder') },
-      ...modelNames.map((name) => ({ value: name, label: name }))
+      ...priceOptions.map((option) => ({ value: option.key, label: option.label })),
     ],
-    [modelNames, t]
+    [priceOptions, t]
+  );
+
+  const handleModelSelect = (value: string) => {
+    const key = value as PriceKey | '';
+    setSelectedKey(key);
+    setForm(priceOptionToFormState(key ? optionByKey.get(key) : undefined));
+  };
+
+  const handleSavePrice = () => {
+    if (!selectedKey) return;
+    const override = buildPriceOverride(form);
+    if (!override) return;
+    onPricesChange({ ...modelPrices, [selectedKey]: override });
+    setSelectedKey('');
+    setForm(EMPTY_PRICE_FORM);
+  };
+
+  const handleDeleteOverride = (key: PriceKey) => {
+    const next = { ...modelPrices };
+    delete next[key];
+    onPricesChange(next);
+  };
+
+  const handleOpenEdit = (key: PriceKey) => {
+    setEditKey(key);
+    setEditForm(priceOptionToFormState(optionByKey.get(key)));
+  };
+
+  const handleSaveEdit = () => {
+    if (!editKey) return;
+    const override = buildPriceOverride(editForm);
+    if (!override) return;
+    onPricesChange({ ...modelPrices, [editKey]: override });
+    setEditKey(null);
+  };
+
+  const renderPriceFields = (
+    state: PriceFormState,
+    onChange: (next: PriceFormState) => void
+  ) => (
+    <>
+      <div className={styles.formField}>
+        <label>{t('usage_stats.model_price_input')} ($/1M)</label>
+        <Input
+          type="number"
+          value={state.input}
+          onChange={(e) => onChange({ ...state, input: e.target.value })}
+          placeholder="0.00"
+          step="0.0001"
+        />
+      </div>
+      <div className={styles.formField}>
+        <label>{t('usage_stats.model_price_output')} ($/1M)</label>
+        <Input
+          type="number"
+          value={state.output}
+          onChange={(e) => onChange({ ...state, output: e.target.value })}
+          placeholder="0.00"
+          step="0.0001"
+        />
+      </div>
+      <div className={styles.formField}>
+        <label>{t('usage_stats.model_price_cache_read')} ($/1M)</label>
+        <Input
+          type="number"
+          value={state.cacheRead}
+          onChange={(e) => onChange({ ...state, cacheRead: e.target.value })}
+          placeholder="0.00"
+          step="0.0001"
+        />
+      </div>
+      <div className={styles.formField}>
+        <label>{t('usage_stats.model_price_cache_creation')} ($/1M)</label>
+        <Input
+          type="number"
+          value={state.cacheCreation}
+          onChange={(e) => onChange({ ...state, cacheCreation: e.target.value })}
+          placeholder="0.00"
+          step="0.0001"
+        />
+      </div>
+    </>
   );
 
   return (
     <Card title={t('usage_stats.model_price_settings')}>
       <div className={styles.pricingSection}>
-        {/* Price Form */}
         <div className={styles.priceForm}>
           <div className={styles.formRow}>
             <div className={styles.formField}>
               <label>{t('usage_stats.model_name')}</label>
               <Select
-                value={selectedModel}
+                value={selectedKey}
                 options={options}
                 onChange={handleModelSelect}
                 placeholder={t('usage_stats.model_price_select_placeholder')}
               />
             </div>
-            <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_prompt')} ($/1M)</label>
-              <Input
-                type="number"
-                value={promptPrice}
-                onChange={(e) => setPromptPrice(e.target.value)}
-                placeholder="0.00"
-                step="0.0001"
-              />
-            </div>
-            <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_completion')} ($/1M)</label>
-              <Input
-                type="number"
-                value={completionPrice}
-                onChange={(e) => setCompletionPrice(e.target.value)}
-                placeholder="0.00"
-                step="0.0001"
-              />
-            </div>
-            <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_cache')} ($/1M)</label>
-              <Input
-                type="number"
-                value={cachePrice}
-                onChange={(e) => setCachePrice(e.target.value)}
-                placeholder="0.00"
-                step="0.0001"
-              />
-            </div>
-            <Button variant="primary" onClick={handleSavePrice} disabled={!selectedModel}>
+            {renderPriceFields(form, setForm)}
+            <Button variant="primary" onClick={handleSavePrice} disabled={!selectedKey}>
               {t('common.save')}
             </Button>
           </div>
         </div>
 
-        {/* Saved Prices List */}
         <div className={styles.pricesList}>
           <h4 className={styles.pricesTitle}>{t('usage_stats.saved_prices')}</h4>
-          {Object.keys(modelPrices).length > 0 ? (
+          {priceOptions.length > 0 ? (
             <div className={styles.pricesGrid}>
-              {Object.entries(modelPrices).map(([model, price]) => (
-                <div key={model} className={styles.priceItem}>
+              {priceOptions.map((option) => (
+                <div key={option.key} className={styles.priceItem}>
                   <div className={styles.priceInfo}>
-                    <span className={styles.priceModel}>{model}</span>
+                    <span className={styles.priceModel}>{option.label}</span>
                     <div className={styles.priceMeta}>
-                      <span>
-                        {t('usage_stats.model_price_prompt')}: ${price.prompt.toFixed(4)}/1M
+                      <span className={styles.priceSourceBadge}>
+                        {t(getSourceLabelKey(option.source))}
                       </span>
                       <span>
-                        {t('usage_stats.model_price_completion')}: ${price.completion.toFixed(4)}/1M
+                        {t('usage_stats.model_price_input')}:{' '}
+                        {formatUsdPer1M(option.price?.inputUsdPer1M)}
                       </span>
                       <span>
-                        {t('usage_stats.model_price_cache')}: ${price.cache.toFixed(4)}/1M
+                        {t('usage_stats.model_price_output')}:{' '}
+                        {formatUsdPer1M(option.price?.outputUsdPer1M)}
+                      </span>
+                      <span>
+                        {t('usage_stats.model_price_cache_read')}:{' '}
+                        {formatUsdPer1M(option.price?.cacheReadUsdPer1M)}
+                      </span>
+                      <span>
+                        {t('usage_stats.model_price_cache_creation')}:{' '}
+                        {formatUsdPer1M(option.price?.cacheCreationUsdPer1M)}
                       </span>
                     </div>
                   </div>
                   <div className={styles.priceActions}>
-                    <Button variant="secondary" size="sm" onClick={() => handleOpenEdit(model)}>
-                      {t('common.edit')}
+                    <Button variant="secondary" size="sm" onClick={() => handleOpenEdit(option.key)}>
+                      {option.hasUserOverride ? t('common.edit') : t('usage_stats.add_override')}
                     </Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDeletePrice(model)}>
-                      {t('common.delete')}
-                    </Button>
+                    {option.hasUserOverride && option.hasOfficialDefault && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleDeleteOverride(option.key)}
+                      >
+                        {t('usage_stats.restore_default')}
+                      </Button>
+                    )}
+                    {option.hasUserOverride && !option.hasOfficialDefault && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDeleteOverride(option.key)}
+                      >
+                        {t('usage_stats.delete_override')}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -181,14 +224,13 @@ export function PriceSettingsCard({
         </div>
       </div>
 
-      {/* Edit Modal */}
       <Modal
-        open={editModel !== null}
-        title={editModel ?? ''}
-        onClose={() => setEditModel(null)}
+        open={editKey !== null}
+        title={editKey ?? ''}
+        onClose={() => setEditKey(null)}
         footer={
           <div className={styles.priceActions}>
-            <Button variant="secondary" onClick={() => setEditModel(null)}>
+            <Button variant="secondary" onClick={() => setEditKey(null)}>
               {t('common.cancel')}
             </Button>
             <Button variant="primary" onClick={handleSaveEdit}>
@@ -196,40 +238,9 @@ export function PriceSettingsCard({
             </Button>
           </div>
         }
-        width={420}
+        width={460}
       >
-        <div className={styles.editModalBody}>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_prompt')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-            />
-          </div>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_completion')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editCompletion}
-              onChange={(e) => setEditCompletion(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-            />
-          </div>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_cache')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editCache}
-              onChange={(e) => setEditCache(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-            />
-          </div>
-        </div>
+        <div className={styles.editModalBody}>{renderPriceFields(editForm, setEditForm)}</div>
       </Modal>
     </Card>
   );

@@ -10,15 +10,21 @@ import {
 } from '@/components/ui/icons';
 import {
   LATENCY_SOURCE_FIELD,
+  aggregateUsageCosts,
   calculateLatencyStatsFromDetails,
-  calculateCost,
+  calculateUsageCost,
+  collectUsageDetails,
+  extractTotalTokens,
   formatCompactNumber,
   formatDurationMs,
   formatPerMinuteValue,
   formatUsd,
-  collectUsageDetails,
-  extractTotalTokens,
-  type ModelPrice,
+  parseNonNegativeNumber,
+  resolveUsageCoverageStatus,
+  resolveWindowUsageCoverageStatus,
+  type CostStatus,
+  type ModelPriceOverrides,
+  type UsageCoverageStatus,
 } from '@/utils/usage';
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -40,7 +46,7 @@ interface StatCardData {
 export interface StatCardsProps {
   usage: UsagePayload | null;
   loading: boolean;
-  modelPrices: Record<string, ModelPrice>;
+  modelPrices: ModelPriceOverrides;
   nowMs: number;
   sparklines: {
     requests: SparklineBundle | null;
@@ -51,20 +57,62 @@ export interface StatCardsProps {
   };
 }
 
+interface StatSummary {
+  tokenBreakdown: { cachedTokens: number; reasoningTokens: number };
+  tokenCoverageStatus: UsageCoverageStatus;
+  rateTokenCoverageStatus: UsageCoverageStatus;
+  rateStats: {
+    rpm: number;
+    tpm: number;
+    windowMinutes: number;
+    requestCount: number;
+    tokenCount: number;
+  };
+  totalCost: number | null;
+  totalCostStatus: CostStatus;
+  latencyStats: {
+    averageMs: number | null;
+    totalMs: number | null;
+    sampleCount: number;
+  };
+}
+
+const getCostStatusLabelKey = (status: CostStatus) => {
+  if (status === 'partial') return 'usage_stats.cost_status_partial';
+  if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
+  if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  return 'usage_stats.cost_status_complete';
+};
+
+const getTokenCoverageLabelKey = (status: UsageCoverageStatus) =>
+  status === 'partial'
+    ? 'usage_stats.token_coverage_partial'
+    : 'usage_stats.token_coverage_unknown';
+
 export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: StatCardsProps) {
   const { t } = useTranslation();
+  const totalTokens = parseNonNegativeNumber(usage?.total_tokens) ?? 0;
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
 
-  const hasPrices = Object.keys(modelPrices).length > 0;
-
-  const { tokenBreakdown, rateStats, totalCost, latencyStats } = useMemo(() => {
+  const {
+    tokenBreakdown,
+    tokenCoverageStatus,
+    rateTokenCoverageStatus,
+    rateStats,
+    totalCost,
+    totalCostStatus,
+    latencyStats,
+  } = useMemo<StatSummary>(() => {
     const empty = {
       tokenBreakdown: { cachedTokens: 0, reasoningTokens: 0 },
+      tokenCoverageStatus: 'unknown' as UsageCoverageStatus,
+      rateTokenCoverageStatus: 'unknown' as UsageCoverageStatus,
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
-      totalCost: 0,
+      totalCost: null as number | null,
+      totalCostStatus: 'unknown_usage' as CostStatus,
       latencyStats: {
         averageMs: null as number | null,
         totalMs: null as number | null,
@@ -73,51 +121,77 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
     };
 
     if (!usage) return empty;
+    const now = nowMs;
+    const hasValidNow = Number.isFinite(now) && now > 0;
     const details = collectUsageDetails(usage);
-    if (!details.length) return empty;
+    if (!details.length) {
+      const rawTotalRequests = Number(usage.total_requests);
+      const hasTotalRequests = Number.isFinite(rawTotalRequests);
+      const totalRequests = hasTotalRequests ? Math.max(rawTotalRequests, 0) : 0;
+      const noRequestsKnown = hasTotalRequests && totalRequests === 0;
+      return {
+        ...empty,
+        tokenCoverageStatus: noRequestsKnown ? 'complete' : 'unknown',
+        rateTokenCoverageStatus: resolveWindowUsageCoverageStatus(
+          hasValidNow,
+          0,
+          0,
+          hasTotalRequests ? totalRequests : 1,
+          noRequestsKnown
+        ),
+      };
+    }
 
     const latencyStats = calculateLatencyStatsFromDetails(details);
 
     let cachedTokens = 0;
     let reasoningTokens = 0;
-    let totalCost = 0;
-
-    const now = nowMs;
     const windowMinutes = 30;
     const windowStart = now - windowMinutes * 60 * 1000;
     let requestCount = 0;
     let tokenCount = 0;
-    const hasValidNow = Number.isFinite(now) && now > 0;
+    let rateKnownUsageCount = 0;
+    let rateUnknownUsageCount = 0;
+    let rateUnlocatableUsageCount = 0;
 
     details.forEach((detail) => {
       const tokens = detail.tokens;
-      cachedTokens += Math.max(
-        typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-        typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-      );
-      if (typeof tokens.reasoning_tokens === 'number') {
-        reasoningTokens += tokens.reasoning_tokens;
-      }
+      cachedTokens += tokens.cachedTokens;
+      reasoningTokens += tokens.reasoningTokens;
 
       const timestamp = detail.__timestampMs ?? 0;
-      if (
-        hasValidNow &&
-        Number.isFinite(timestamp) &&
-        timestamp >= windowStart &&
-        timestamp <= now
-      ) {
+      if (!hasValidNow || !Number.isFinite(timestamp) || timestamp <= 0) {
+        rateUnlocatableUsageCount += 1;
+      } else if (timestamp >= windowStart && timestamp <= now) {
         requestCount += 1;
-        tokenCount += extractTotalTokens(detail);
-      }
-
-      if (hasPrices) {
-        totalCost += calculateCost(detail, modelPrices);
+        if (detail.tokens.hasKnownUsage) {
+          tokenCount += extractTotalTokens(detail);
+          rateKnownUsageCount += 1;
+        } else {
+          rateUnknownUsageCount += 1;
+        }
       }
     });
+    const costSummary = aggregateUsageCosts(
+      details.map((detail) => calculateUsageCost(detail, modelPrices))
+    );
+    const knownUsageCount = details.filter((detail) => detail.tokens.hasKnownUsage).length;
+    const tokenCoverageStatus = resolveUsageCoverageStatus(
+      knownUsageCount,
+      details.length - knownUsageCount
+    );
+    const rateTokenCoverageStatus = resolveWindowUsageCoverageStatus(
+      hasValidNow,
+      rateKnownUsageCount,
+      rateUnknownUsageCount,
+      rateUnlocatableUsageCount
+    );
 
     const denominator = windowMinutes > 0 ? windowMinutes : 1;
     return {
       tokenBreakdown: { cachedTokens, reasoningTokens },
+      tokenCoverageStatus,
+      rateTokenCoverageStatus,
       rateStats: {
         rpm: requestCount / denominator,
         tpm: tokenCount / denominator,
@@ -125,10 +199,11 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
         requestCount,
         tokenCount,
       },
-      totalCost,
+      totalCost: costSummary.totalCostUsd,
+      totalCostStatus: costSummary.costStatus,
       latencyStats,
     };
-  }, [hasPrices, modelPrices, nowMs, usage]);
+  }, [modelPrices, nowMs, usage]);
 
   const statsCards: StatCardData[] = [
     {
@@ -166,17 +241,31 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#8b5cf6',
       accentSoft: 'rgba(139, 92, 246, 0.18)',
       accentBorder: 'rgba(139, 92, 246, 0.35)',
-      value: loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0),
+      value:
+        loading
+          ? '-'
+          : tokenCoverageStatus === 'unknown'
+            ? '--'
+            : formatCompactNumber(totalTokens),
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.cached_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(tokenBreakdown.cachedTokens)}
+            {loading || tokenCoverageStatus === 'unknown'
+              ? '-'
+              : formatCompactNumber(tokenBreakdown.cachedTokens)}
           </span>
           <span className={styles.statMetaItem}>
             {t('usage_stats.reasoning_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(tokenBreakdown.reasoningTokens)}
+            {loading || tokenCoverageStatus === 'unknown'
+              ? '-'
+              : formatCompactNumber(tokenBreakdown.reasoningTokens)}
           </span>
+          {!loading && tokenCoverageStatus !== 'complete' && (
+            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
+              {t(getTokenCoverageLabelKey(tokenCoverageStatus))}
+            </span>
+          )}
         </>
       ),
       trend: sparklines.tokens,
@@ -204,14 +293,28 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#f97316',
       accentSoft: 'rgba(249, 115, 22, 0.18)',
       accentBorder: 'rgba(249, 115, 22, 0.32)',
-      value: loading ? '-' : formatPerMinuteValue(rateStats.tpm),
+      value:
+        loading
+          ? '-'
+          : rateTokenCoverageStatus === 'unknown'
+            ? '--'
+            : formatPerMinuteValue(rateStats.tpm),
       meta: (
-        <span className={styles.statMetaItem}>
-          {t('usage_stats.total_tokens')}:{' '}
-          {loading ? '-' : formatCompactNumber(rateStats.tokenCount)}
-        </span>
+        <>
+          <span className={styles.statMetaItem}>
+            {t('usage_stats.total_tokens')}:{' '}
+            {loading || rateTokenCoverageStatus === 'unknown'
+              ? '-'
+              : formatCompactNumber(rateStats.tokenCount)}
+          </span>
+          {!loading && rateTokenCoverageStatus !== 'complete' && (
+            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
+              {t(getTokenCoverageLabelKey(rateTokenCoverageStatus))}
+            </span>
+          )}
+        </>
       ),
-      trend: sparklines.tpm,
+      trend: rateTokenCoverageStatus === 'unknown' ? null : sparklines.tpm,
     },
     {
       key: 'cost',
@@ -220,21 +323,21 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : hasPrices ? formatUsd(totalCost) : '--',
+      value: loading ? '-' : totalCost !== null ? formatUsd(totalCost) : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.total_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0)}
+            {loading ? '-' : formatCompactNumber(totalTokens)}
           </span>
-          {!hasPrices && (
+          {!loading && totalCostStatus !== 'complete' && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.cost_need_price')}
+              {t(getCostStatusLabelKey(totalCostStatus))}
             </span>
           )}
         </>
       ),
-      trend: hasPrices ? sparklines.cost : null,
+      trend: totalCost !== null ? sparklines.cost : null,
     },
   ];
 

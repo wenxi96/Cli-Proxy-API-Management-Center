@@ -8,7 +8,7 @@ import {
   buildHourlyCostSeries,
   buildDailyCostSeries,
   formatUsd,
-  type ModelPrice
+  type ModelPriceOverrides
 } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -19,7 +19,7 @@ export interface CostTrendChartProps {
   loading: boolean;
   isDark: boolean;
   isMobile: boolean;
-  modelPrices: Record<string, ModelPrice>;
+  modelPrices: ModelPriceOverrides;
   hourWindowHours?: number;
 }
 
@@ -47,11 +47,16 @@ export function CostTrendChart({
 }: CostTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
-  const hasPrices = Object.keys(modelPrices).length > 0;
 
-  const { chartData, chartOptions, hasData } = useMemo(() => {
-    if (!hasPrices || !usage) {
-      return { chartData: { labels: [], datasets: [] }, chartOptions: {}, hasData: false };
+  const { chartData, chartOptions, hasData, costStatus, coverageStatus } = useMemo(() => {
+    if (!usage) {
+      return {
+        chartData: { labels: [], datasets: [] },
+        chartOptions: {},
+        hasData: false,
+        costStatus: 'unknown_usage' as const,
+        coverageStatus: 'unknown' as const,
+      };
     }
 
     const series =
@@ -90,8 +95,14 @@ export function CostTrendChart({
       }
     };
 
-    return { chartData: data, chartOptions: options, hasData: series.hasData };
-  }, [usage, period, isDark, isMobile, modelPrices, hasPrices, hourWindowHours, t]);
+    return {
+      chartData: data,
+      chartOptions: options,
+      hasData: series.hasData,
+      costStatus: series.costStatus,
+      coverageStatus: series.coverageStatus,
+    };
+  }, [usage, period, isDark, isMobile, modelPrices, hourWindowHours, t]);
 
   return (
     <Card
@@ -117,12 +128,21 @@ export function CostTrendChart({
     >
       {loading ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : !hasPrices ? (
-        <div className={styles.hint}>{t('usage_stats.cost_need_price')}</div>
       ) : !hasData ? (
-        <div className={styles.hint}>{t('usage_stats.cost_no_data')}</div>
+        <div className={styles.hint}>
+          {t(
+            costStatus === 'unconfigured'
+              ? 'usage_stats.cost_need_price'
+              : 'usage_stats.cost_no_data'
+          )}
+        </div>
       ) : (
         <div className={styles.chartWrapper}>
+          {coverageStatus === 'partial' && (
+            <div className={styles.tokenCoverageNotice}>
+              {t('usage_stats.cost_status_partial')}
+            </div>
+          )}
           <div className={styles.chartArea}>
             <div className={styles.chartScroller}>
               <div
