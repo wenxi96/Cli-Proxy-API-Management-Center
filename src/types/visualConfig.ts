@@ -1,11 +1,9 @@
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
-export type DisableImageGenerationMode = 'false' | 'true' | 'chat';
+export type DisableImageGenerationMode = 'false' | 'true' | 'chat' | 'passthrough';
 export type PluginStoreAuthType = 'none' | 'bearer' | 'basic' | 'header' | 'github-token';
 export type PluginStoreAuthApplyTo = 'registry' | 'metadata' | 'artifact';
 export type PayloadParamValidationErrorCode =
-  | 'payload_invalid_number'
-  | 'payload_invalid_boolean'
-  | 'payload_invalid_json';
+  'payload_invalid_number' | 'payload_invalid_boolean' | 'payload_invalid_json';
 
 export type VisualScopedPoolNumericField =
   | 'limit'
@@ -41,7 +39,8 @@ export type VisualConfigValidationErrorCode =
   | 'port_range'
   | 'non_negative_integer'
   | 'quota_threshold_percent_range'
-  | 'duplicate_provider_key';
+  | 'duplicate_provider_key'
+  | 'integer_range_1_3600';
 
 export type VisualConfigValidationErrors = Partial<
   Record<VisualConfigFieldPath, VisualConfigValidationErrorCode>

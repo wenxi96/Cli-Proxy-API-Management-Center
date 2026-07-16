@@ -27,6 +27,7 @@ import {
   PREMIUM_CODEX_PLAN_TYPES,
   formatAntigravityResetLabel,
   formatUsdFromCents,
+  formatXaiOnDemandAmount,
   formatXaiRemainingAmount,
   getAntigravityPlanLabel,
   resolveXaiPlan,
@@ -289,7 +290,9 @@ const buildBatchQuotaRows = (
   const rawWindows = collectBatchQuotaWindows(result.details);
   const windows =
     result.provider === 'codex'
-      ? rawWindows.filter((window) => isCodexMonthlyWindow(window) || hasBatchWindowDisplayData(window))
+      ? rawWindows.filter(
+          (window) => isCodexMonthlyWindow(window) || hasBatchWindowDisplayData(window)
+        )
       : rawWindows;
 
   if (windows.length === 0) {
@@ -360,9 +363,7 @@ const resolveBatchCodexUsedPercent = (window: AuthFileBatchCheckWindow): number 
   return null;
 };
 
-const batchCodexWindowToQuotaWindow = (
-  window: AuthFileBatchCheckWindow
-): CodexQuotaWindow => {
+const batchCodexWindowToQuotaWindow = (window: AuthFileBatchCheckWindow): CodexQuotaWindow => {
   const meta = resolveBatchCodexWindowMeta(window);
   const label = String(window.label ?? window.id ?? '').trim();
   return {
@@ -517,7 +518,11 @@ const codexStateToQuotaView = (quota: CodexQuotaState, t: TFunction): Normalized
     });
   }
   if (expiryLabel) {
-    planItems.push({ key: 'subscription-expiry', label: t('codex_quota.expires_label'), value: expiryLabel });
+    planItems.push({
+      key: 'subscription-expiry',
+      label: t('codex_quota.expires_label'),
+      value: expiryLabel,
+    });
   }
   if (rateLimitResetCreditsAvailableCount !== null) {
     planItems.push({
@@ -689,11 +694,7 @@ const kimiStateToQuotaView = (quota: KimiQuotaState, t: TFunction): NormalizedQu
     const limit = row.limit;
     const used = row.used;
     const remaining =
-      limit > 0
-        ? Math.max(0, Math.min(100, ((limit - used) / limit) * 100))
-        : used > 0
-          ? 0
-          : null;
+      limit > 0 ? Math.max(0, Math.min(100, ((limit - used) / limit) * 100)) : used > 0 ? 0 : null;
     const rowLabel = row.labelKey
       ? t(row.labelKey, (row.labelParams ?? {}) as Record<string, string | number>)
       : (row.label ?? '');
@@ -724,11 +725,29 @@ const xaiStateToQuotaView = (quota: XaiQuotaState, t: TFunction): NormalizedQuot
 
   const clampedUsed =
     billing.usedPercent === null ? null : Math.max(0, Math.min(100, billing.usedPercent));
-  const remaining =
-    clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+  const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
   const amountLabel = formatXaiRemainingAmount(billing);
   const resetLabel = formatQuotaResetTime(billing.billingPeriodEnd);
   const onDemandCap = billing.onDemandCapCents ?? 0;
+  const clampedOnDemandUsed =
+    billing.onDemandUsedPercent === null
+      ? null
+      : Math.max(0, Math.min(100, billing.onDemandUsedPercent));
+  const onDemandRemaining =
+    clampedOnDemandUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedOnDemandUsed));
+  const weeklyUsed =
+    billing.periodType === 'weekly' && billing.usagePercent !== null
+      ? Math.max(0, Math.min(100, billing.usagePercent))
+      : null;
+  const weeklyRemaining = weeklyUsed === null ? null : Math.max(0, Math.min(100, 100 - weeklyUsed));
+  const weeklyResetLabel = formatQuotaResetTime(billing.periodEnd);
+  const hasWeeklyData =
+    billing.periodType === 'weekly' &&
+    (weeklyUsed !== null || Boolean(billing.periodEnd) || billing.productUsage.length > 0);
+  const hasMonthlyData =
+    billing.monthlyLimitCents !== null ||
+    billing.usedCents !== null ||
+    Boolean(billing.billingPeriodEnd);
   const plan = resolveXaiPlan(billing.monthlyLimitCents);
   const payAsYouGoLabel =
     onDemandCap > 0
@@ -745,29 +764,66 @@ const xaiStateToQuotaView = (quota: XaiQuotaState, t: TFunction): NormalizedQuot
       premium: plan.premium,
     });
   }
-  planItems.push({
-    key: 'pay-as-you-go',
-    label: t('xai_quota.pay_as_you_go_label'),
-    value: payAsYouGoLabel,
-  });
+  if (onDemandCap <= 0) {
+    planItems.push({
+      key: 'pay-as-you-go',
+      label: t('xai_quota.pay_as_you_go_label'),
+      value: payAsYouGoLabel,
+    });
+  }
 
-  // rows: 单行 monthly credits
-  const rows: NormalizedQuotaRow[] = [
-    {
+  const rows: NormalizedQuotaRow[] = [];
+  if (hasWeeklyData) {
+    rows.push({
+      kind: 'leaf',
+      key: 'weekly-limit',
+      label: t('xai_quota.weekly_limit'),
+      percent: weeklyRemaining,
+      percentLabel: t('xai_quota.used_percent', {
+        percent: formatPercentValue(weeklyUsed),
+      }),
+      resetLabel: weeklyResetLabel === '-' ? undefined : weeklyResetLabel,
+    });
+  }
+  billing.productUsage.forEach((item) => {
+    const used = item.usagePercent === null ? null : Math.max(0, Math.min(100, item.usagePercent));
+    const remainingPercent = used === null ? null : Math.max(0, Math.min(100, 100 - used));
+    rows.push({
+      kind: 'leaf',
+      key: `product-${item.product}`,
+      label: t('xai_quota.product_usage', { product: item.product }),
+      percent: remainingPercent,
+      percentLabel: t('xai_quota.used_percent', {
+        percent: formatPercentValue(used),
+      }),
+    });
+  });
+  if (onDemandCap > 0) {
+    rows.push({
+      kind: 'leaf',
+      key: 'pay-as-you-go',
+      label: t('xai_quota.pay_as_you_go_label'),
+      percent: onDemandRemaining,
+      percentLabel: formatPercentValue(onDemandRemaining),
+      amountLabel: formatXaiOnDemandAmount(billing),
+    });
+  }
+  if (hasMonthlyData) {
+    rows.push({
       kind: 'leaf',
       key: 'monthly-credits',
       label: t('xai_quota.monthly_credits'),
       percent: remaining,
       percentLabel: formatPercentValue(remaining),
       amountLabel,
-      resetLabel,
-    },
-  ];
+      resetLabel: resetLabel === '-' ? undefined : resetLabel,
+    });
+  }
 
   return {
     plan: planItems.length > 0 ? { items: planItems } : undefined,
     rows,
-    empty: undefined,
+    empty: rows.length === 0 && planItems.length === 0 ? t('xai_quota.empty_data') : undefined,
   };
 };
 
