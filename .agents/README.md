@@ -12,7 +12,7 @@ Persistence Mode: git-visible
 
 ## 当前活跃任务
 
-- `tasks/20260715-frontend-upstream-v1-18-3-absorption/`：前端 `v1.18.3` 代码已推送 `dev` 并以 code-only 方式合入 `master@12a49f0`，当前等待发版授权。
+- `tasks/20260715-frontend-upstream-v1-18-3-absorption/`：前端 `v1.18.3` 吸收已完成，发布 `v1.18.3-wx-2.13`，Release 与 `management.html` 核验通过。
 - `tasks/20260703-codex-batch-quota-display-parity/`：修复 Codex 批量检查卡片的额度展示逻辑，使 B 路 Codex 展示复用单文件刷新 A 路的 `CodexQuotaState` 适配器；已提交到 `dev@75a4d64`、合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
 - `tasks/20260703-frontend-upstream-v1-17-8-absorption/`：前端独立吸收 `upstream/main@e9817a8` / `v1.17.8`；已提交到 `dev@69afc30`、合入 `master@cbe6d0e`，并随 `v1.17.8-wx-2.9` 发布。
 - `tasks/20260707-frontend-upstream-absorption-detection/`：调用项目级 `upstream-absorption` skill 执行前端上游吸收检测干跑，固定上游目标、生成更新清单并完成冲突预检。

@@ -4,7 +4,7 @@
 
 - Task ID: 20260715-frontend-upstream-v1-18-3-absorption
 - Loop ID: L02
-- State: active
+- State: accepted
 - Phase: close
 - Owner / Mode: coordinator / supervised
 - Last Updated: 2026-07-16T17:15:00+08:00
@@ -35,13 +35,11 @@
 
 - 上游 SHA 漂移、出现未规划高风险冲突、隔离执行面不健康或用户未确认。
 
-## 恢复契约
+## 终态说明
 
-- 下一步: 等待发版授权。
-- 恢复触发条件: `L03-frontend-release-authorization`
-- 阻塞项: none
-- 最近安全锚点: `dev@878b4d75ed832fd61cb9b87c4a05722733937ed8`
-- 优先阅读的文件 / 证据:
+- 任务已 accepted，不再从本 loop 恢复执行。
+- 最终安全锚点: `v1.18.3-wx-2.13@7f1fd2e`。
+- 终态证据:
   - `evidence/plan-review-report.md`
   - `evidence/conflict-precheck.md`
 
@@ -54,3 +52,4 @@
 - 2026-07-16：候选提交为 `41ad444`，已快进并推送 `origin/dev`，远端 SHA 核验一致。
 - 2026-07-16：治理证据提交为 `81b4c1f` 并推送 dev；当前仅等待 master checkpoint。
 - 2026-07-16：从 master 基线 mainline cherry-pick 代码提交，生成并推送 `master@12a49f0`；业务树等价、`.agents` 为空、完整验证通过。
+- 2026-07-16：增加无 tree 变化的上游 ancestry merge，最终 `master@7f1fd2e`；发布 `v1.18.3-wx-2.13`，Release 与 management.html 核验通过，L02 accepted/close。

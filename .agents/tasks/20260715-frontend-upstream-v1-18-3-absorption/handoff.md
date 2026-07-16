@@ -2,7 +2,7 @@
 
 ## Current State
 
-前端固定目标 `d3df9b07` / `v1.18.3` 已提交推送 dev，并以 code-only 策略合入 `master@12a49f02e3130c8998e763b4ffcd2952effd14d4`。13 个冲突全部解决，根 `AGENTS.md` 已排除，H01/H02/M01/M02 均修复，最终独立复评 `No findings / ready`，master candidate 完整 Bun 验证通过。当前等待发版授权。
+前端固定目标 `d3df9b07` / `v1.18.3` 已完整吸收、评审、验证并发布。最终 `master@7f1fd2e` 无 `.agents`，标签 `v1.18.3-wx-2.13` 的 Release 与 `management.html` size/SHA-256 均核验通过。任务已进入 accepted terminal checkpoint。
 
 ## Completed Scope
 
@@ -21,7 +21,7 @@
 
 ## Remaining Work
 
-- 等待用户明确授权后再创建 tag 和发版。
+- 无剩余工作；后续新增需求创建新任务。
 
 ## Resume Pointers
 
@@ -29,3 +29,5 @@
 - Current loop: `loops/L02-candidate-merge.md`
 - Governance plan: `evidence/governance-plan.md`
 - Review loop: `evidence/post-merge-review-loop.md`
+- Release verification: `evidence/release-verification-report.md`
+- Closeout: `closeout.md`

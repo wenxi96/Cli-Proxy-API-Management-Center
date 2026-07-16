@@ -84,3 +84,10 @@
 - Verification: 非 `.agents` 业务树与 `41ad444` 完全等价；master `.agents` 为空；Bun 1.3.14 frozen install、94 tests、lint、build、type-check、diff check 和冲突扫描通过；远端 SHA 核验一致。
 - Result: 前端代码已进入远端 master，治理提交仍只存在于 dev。
 - Next: 等待发版授权；未授权前不创建或推送 tag。
+
+### 2026-07-16 21:00 前端发布完成
+
+- Action: 以无 tree 变化的 ancestry merge 恢复 `v1.18.3` 可达基线，最终 master 为 `7f1fd2e`；计算并推送 `v1.18.3-wx-2.13`。
+- Verification: tag 指向 master；Build and Release run `29498962165` success；`management.html` 实际下载 size `3,232,149`，SHA-256 `04b5b4b5...f08e61` 与 GitHub digest 一致。
+- Result: 前端发布链路完整通过，任务 accepted。
+- Next: none。
