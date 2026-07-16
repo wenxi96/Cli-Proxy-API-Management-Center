@@ -109,10 +109,6 @@ class ApiClient {
       (config) => {
         // 设置 baseURL
         config.baseURL = this.apiBase;
-        if (config.url) {
-          // Normalize deprecated Gemini endpoint to the current path.
-          config.url = config.url.replace(/\/generative-language-api-key\b/g, '/gemini-api-key');
-        }
 
         // 添加认证头
         if (this.managementKey) {
@@ -269,7 +265,7 @@ class ApiClient {
   }
 
   /**
-   * 保留对 axios.request 的访问，便于下载等场景
+   * 保留对 axios.request 的访问，供 POST 下载等需要原始响应的场景使用。
    */
   async requestRaw(config: AxiosRequestConfig): Promise<AxiosResponse> {
     return this.instance.request(config);

@@ -21,12 +21,7 @@ export const CODE0_BASE_URL_OPTIONS = [
   },
 ] as const;
 
-export const CODE0_PROTOCOL_LABELS = [
-  'openai',
-  'anthropic',
-  'gemini',
-  'codexResponses',
-] as const;
+export const CODE0_PROTOCOL_LABELS = ['openai', 'anthropic', 'gemini', 'codexResponses'] as const;
 
 const normalizeText = (value: string | undefined | null): string =>
   String(value ?? '')
@@ -86,9 +81,7 @@ const matchesCode0GeminiBaseUrl = (value: string | undefined | null): boolean =>
   );
 };
 
-export const isCode0OpenAIProvider = (
-  config: OpenAIProviderConfig | undefined | null
-): boolean => {
+export const isCode0OpenAIProvider = (config: OpenAIProviderConfig | undefined | null): boolean => {
   if (!config) return false;
   return (
     normalizeText(config.name) === normalizeText(CODE0_PROVIDER_NAME) ||
@@ -125,13 +118,3 @@ export const buildCode0Raw = (config: Config | null | undefined): SponsorProvide
     .map((item, index) => ({ config: item, index }))
     .filter((item) => isCode0GeminiProvider(item.config)),
 });
-
-export const hasCode0Config = (config: Config | null | undefined): boolean => {
-  const raw = buildCode0Raw(config);
-  return (
-    raw.openai.length > 0 ||
-    raw.claude.length > 0 ||
-    raw.codex.length > 0 ||
-    raw.gemini.length > 0
-  );
-};
