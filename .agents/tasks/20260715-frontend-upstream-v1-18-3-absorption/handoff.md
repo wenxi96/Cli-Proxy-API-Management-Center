@@ -2,7 +2,7 @@
 
 ## Current State
 
-前端固定目标 `d3df9b07` / `v1.18.3` 已提交并推送到 `dev@41ad4447f5d2ad6c31069837a036bbc1c494f55b`。13 个冲突全部解决，根 `AGENTS.md` 已排除，H01/H02/M01/M02 均修复，最终独立复评 `No findings / ready`，完整 Bun 验证通过。当前等待 `master` 合入授权。
+前端固定目标 `d3df9b07` / `v1.18.3` 已提交推送 dev，并以 code-only 策略合入 `master@12a49f02e3130c8998e763b4ffcd2952effd14d4`。13 个冲突全部解决，根 `AGENTS.md` 已排除，H01/H02/M01/M02 均修复，最终独立复评 `No findings / ready`，master candidate 完整 Bun 验证通过。当前等待发版授权。
 
 ## Completed Scope
 
@@ -21,7 +21,7 @@
 
 ## Remaining Work
 
-- 等待用户明确授权后再将代码合入 `master`；未授权前不打 tag、不发版。
+- 等待用户明确授权后再创建 tag 和发版。
 
 ## Resume Pointers
 

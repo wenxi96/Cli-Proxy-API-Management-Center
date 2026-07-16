@@ -37,8 +37,8 @@
 
 ## 恢复契约
 
-- 下一步: 等待 `master` 合入授权。
-- 恢复触发条件: `L03-frontend-master-merge-authorization`
+- 下一步: 等待发版授权。
+- 恢复触发条件: `L03-frontend-release-authorization`
 - 阻塞项: none
 - 最近安全锚点: `dev@878b4d75ed832fd61cb9b87c4a05722733937ed8`
 - 优先阅读的文件 / 证据:
@@ -53,3 +53,4 @@
 - 2026-07-16：94 tests、type-check、lint、build、`bun run verify` 与最终独立复评通过，L02 accepted/close。
 - 2026-07-16：候选提交为 `41ad444`，已快进并推送 `origin/dev`，远端 SHA 核验一致。
 - 2026-07-16：治理证据提交为 `81b4c1f` 并推送 dev；当前仅等待 master checkpoint。
+- 2026-07-16：从 master 基线 mainline cherry-pick 代码提交，生成并推送 `master@12a49f0`；业务树等价、`.agents` 为空、完整验证通过。

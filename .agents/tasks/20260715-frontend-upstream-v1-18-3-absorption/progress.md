@@ -77,3 +77,10 @@
 - Verification: 推送后 `origin/dev` 与本地 `dev` 一致，主工作树无未提交改动。
 - Result: 代码与治理证据均已进入 `dev`；治理内容未进入 `master`。
 - Next: 等待用户明确授权代码合入 `master`。
+
+### 2026-07-16 18:05 前端代码合入并推送 master
+
+- Action: 从 `origin/master@41d8d6d` 对已验证代码提交 `41ad444` 执行 mainline cherry-pick，仅提取业务代码差异，生成 `master@12a49f0` 并推送。
+- Verification: 非 `.agents` 业务树与 `41ad444` 完全等价；master `.agents` 为空；Bun 1.3.14 frozen install、94 tests、lint、build、type-check、diff check 和冲突扫描通过；远端 SHA 核验一致。
+- Result: 前端代码已进入远端 master，治理提交仍只存在于 dev。
+- Next: 等待发版授权；未授权前不创建或推送 tag。
