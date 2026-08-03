@@ -10,10 +10,18 @@ import {
 } from '@/components/ui/icons';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { Select } from '@/components/ui/Select';
+import {
+  DISABLE_ALL_RULE,
+  ExcludedModelsPicker,
+  formatExcludedRulesText,
+  parseExcludedRulesText,
+  type ExcludedModelsCatalogState,
+} from '@/components/excludedModels';
 import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import type { ModelInfo } from '@/utils/models';
 import { PROVIDER_DESCRIPTORS } from '../../descriptors';
+import { readThinkingLevels } from '../../thinkingLevels';
 import type {
   ApiKeyEntryInput,
   ModelEntryInput,
@@ -29,6 +37,10 @@ import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
 import { CLAUDE_API_BASE_URL } from '../../claudeApi';
+import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
+
+/** 模块级常量，免得每次渲染都给 picker 一个新数组引用。 */
+const DISABLE_ALL_RULES = [DISABLE_ALL_RULE];
 
 interface BaseProviderFormProps {
   brand: ProviderBrand;
@@ -44,8 +56,11 @@ const emptyHeader = () => ({ key: '', value: '' });
 const emptyModel = (): ModelEntryInput => ({ name: '', alias: '' });
 const emptyApiKeyEntry = (): ApiKeyEntryInput => ({
   apiKey: '',
+  apiKeyEdited: false,
   proxyUrl: '',
+  weight: undefined,
 });
+const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
 const stripDisableAllRule = (list?: string[]): string[] =>
   (list ?? []).filter((s) => s.trim() !== '*');
@@ -69,16 +84,18 @@ function buildInitialForm(
       apiKeyEdited: false,
       name: '',
       displayName: '',
-      baseUrl: brand === 'claudeApi' ? CLAUDE_API_BASE_URL : '',
+      baseUrl:
+        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
       proxyUrl: '',
       prefix: '',
       disabled: false,
       disableCooling: false,
       priority: undefined,
+      weight: undefined,
       models: [emptyModel()],
       headers: [emptyHeader()],
       excludedModelsText: '',
-      websockets: brand === 'codex' ? false : undefined,
+      websockets: brand === 'codex' || brand === 'xai' ? false : undefined,
       cloak: isClaudeLikeBrand(brand)
         ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
         : undefined,
@@ -86,8 +103,10 @@ function buildInitialForm(
       testModel:
         brand === 'openaiCompatibility' ||
         brand === 'codex' ||
+        brand === 'xai' ||
         isClaudeLikeBrand(brand) ||
-        brand === 'gemini'
+        brand === 'gemini' ||
+        brand === 'interactions'
           ? ''
           : undefined,
       apiKeyEntries: brand === 'openaiCompatibility' ? [emptyApiKeyEntry()] : undefined,
@@ -116,6 +135,7 @@ function buildInitialForm(
             testModel: m.testModel,
             image: m.image === true,
             thinkingJson: formatJsonObject(m.thinking),
+            thinkingLevels: readThinkingLevels(m.thinking),
           }))
         : [emptyModel()],
       headers: cfg.headers
@@ -129,6 +149,7 @@ function buildInitialForm(
             apiKeyEdited: false,
             existingApiKey: entry.apiKey,
             proxyUrl: entry.proxyUrl ?? '',
+            weight: entry.weight,
             authIndex: entry.authIndex,
           }))
         : [emptyApiKeyEntry()],
@@ -139,6 +160,10 @@ function buildInitialForm(
   const disabled = hasDisableAllModelsRule(cfg.excludedModels);
   const excludedList = stripDisableAllRule(cfg.excludedModels);
   return {
+    // Keep the API key blank in edit mode. Pre-filling the real key makes this
+    // password field a browser-autofill target (the saved management key can
+    // overwrite it) and defeats the "leave empty = keep unchanged" contract; an
+    // empty field is preserved on save via buildProviderKeyConfig's existing fallback.
     apiKey: '',
     apiKeyEdited: false,
     name: '',
@@ -149,19 +174,25 @@ function buildInitialForm(
     disabled,
     disableCooling: cfg.disableCooling === true,
     priority: cfg.priority,
+    weight: cfg.weight,
     models: cfg.models?.length
       ? cfg.models.map((m) => ({
           name: m.name,
           alias: m.alias ?? '',
           priority: m.priority,
           testModel: m.testModel,
+          thinkingJson: formatJsonObject(m.thinking),
+          thinkingLevels: readThinkingLevels(m.thinking),
         }))
       : [emptyModel()],
     headers: cfg.headers
       ? Object.entries(cfg.headers).map(([k, v]) => ({ key: k, value: String(v) }))
       : [emptyHeader()],
     excludedModelsText: excludedList.join('\n'),
-    websockets: brand === 'codex' ? (cfg as ProviderKeyConfig).websockets === true : undefined,
+    websockets:
+      brand === 'codex' || brand === 'xai'
+        ? (cfg as ProviderKeyConfig).websockets === true
+        : undefined,
     cloak: isClaudeLikeBrand(brand)
       ? {
           mode: (cfg as ProviderKeyConfig).cloak?.mode ?? '',
@@ -173,7 +204,14 @@ function buildInitialForm(
     experimentalCchSigning: isClaudeLikeBrand(brand)
       ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
       : undefined,
-    testModel: brand === 'codex' || isClaudeLikeBrand(brand) || brand === 'gemini' ? '' : undefined,
+    testModel:
+      brand === 'codex' ||
+      brand === 'xai' ||
+      isClaudeLikeBrand(brand) ||
+      brand === 'gemini' ||
+      brand === 'interactions'
+        ? ''
+        : undefined,
   };
 }
 
@@ -197,6 +235,7 @@ export function BaseProviderForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [showSingleApiKey, setShowSingleApiKey] = useState(false);
+
   const isDirty = useMemo(
     () => JSON.stringify(form) !== initialFormSignature,
     [form, initialFormSignature]
@@ -373,6 +412,18 @@ export function BaseProviderForm({
     if (descriptor.baseUrlRequired && !form.baseUrl.trim()) {
       return t('providersPage.form.validation.baseUrlRequired');
     }
+    const weights = [
+      ...(brand === 'openaiCompatibility'
+        ? (form.apiKeyEntries ?? []).map((entry) => entry.weight)
+        : []),
+      ...(brand !== 'openaiCompatibility' ? [form.weight] : []),
+    ];
+    if (weights.some((weight) => weight !== undefined && !Number.isSafeInteger(weight))) {
+      return t('providersPage.form.validation.weightInteger');
+    }
+    if (weights.some((weight) => weight !== undefined && weight > MAX_CREDENTIAL_WEIGHT)) {
+      return t('providersPage.form.validation.weightMax', { max: MAX_CREDENTIAL_WEIGHT });
+    }
     return null;
   };
 
@@ -406,17 +457,52 @@ export function BaseProviderForm({
       form.apiKeyEntries && form.apiKeyEntries.length ? form.apiKeyEntries : [emptyApiKeyEntry()],
     [form.apiKeyEntries]
   );
+
+  const excludedRules = useMemo(
+    () => parseExcludedRulesText(form.excludedModelsText),
+    [form.excludedModelsText]
+  );
+  /**
+   * 候选目录 = discovery 发现的模型 ∪ 表单里已配置的模型名。
+   *
+   * 两者都可能为空——`vertex` 支持排除模型却不在 MODEL_DISCOVERY_BRANDS 里，永远没有
+   * discovery；其余 brand 在用户手动跑一次发现之前也没有。因此**无目录是常态**，
+   * picker 必须能在没有目录时退化成纯规则编辑器。
+   */
+  const excludedCandidates = useMemo(() => {
+    const byKey = new Map<string, { id: string; displayName?: string }>();
+    discovery.models.forEach((model) => {
+      const id = model.name?.trim();
+      if (id) byKey.set(id.toLowerCase(), { id, displayName: model.alias || undefined });
+    });
+    form.models.forEach((model) => {
+      const id = model.name?.trim();
+      if (id && !byKey.has(id.toLowerCase())) byKey.set(id.toLowerCase(), { id });
+    });
+    return [...byKey.values()].sort((left, right) =>
+      left.id.localeCompare(right.id, undefined, { sensitivity: 'base' })
+    );
+  }, [discovery.models, form.models]);
+  const excludedCatalogState: ExcludedModelsCatalogState = discovery.loading
+    ? 'loading'
+    : discovery.error
+      ? 'error'
+      : excludedCandidates.length === 0
+        ? 'unavailable'
+        : 'ready';
   const actualApiKeyEntries = form.apiKeyEntries ?? [];
   const supportsDisableCooling =
     brand === 'gemini' ||
+    brand === 'interactions' ||
     brand === 'codex' ||
+    brand === 'xai' ||
     isClaudeLikeBrand(brand) ||
     brand === 'openaiCompatibility';
-  const supportsOpenAIModelOptions = brand === 'openaiCompatibility';
+  const supportsModelImage = brand === 'openaiCompatibility';
   const singleConnectivity =
-    brand === 'codex'
+    brand === 'codex' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
-      : brand === 'gemini'
+      : brand === 'gemini' || brand === 'interactions'
         ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
         : isClaudeLikeBrand(brand)
           ? { status: connectivity.claudeStatus, run: connectivity.runClaude }
@@ -438,7 +524,7 @@ export function BaseProviderForm({
 
   return (
     <form id={formId} className={styles.form} onSubmit={handleSubmit} noValidate>
-      {/* Basic fields */}
+      {/* 基础字段 */}
       <div className={styles.section}>
         {descriptor.supportsName ? (
           <div className={styles.field}>
@@ -597,11 +683,37 @@ export function BaseProviderForm({
           </div>
         ) : null}
 
+        {brand !== 'openaiCompatibility' ? (
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={`${fid}-weight`}>
+              {t('providersPage.form.weight')}
+            </label>
+            <input
+              id={`${fid}-weight`}
+              type="number"
+              step="1"
+              max={MAX_CREDENTIAL_WEIGHT}
+              className={styles.input}
+              value={form.weight ?? ''}
+              placeholder="1"
+              onChange={(e) =>
+                updateField('weight', e.target.value === '' ? undefined : Number(e.target.value))
+              }
+              disabled={mutating}
+            />
+            <span className={styles.labelHint}>{t('providersPage.form.weightHint')}</span>
+          </div>
+        ) : null}
+
         {descriptor.supportsTestModel ? (
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${fid}-testModel`}>
               {t('providersPage.form.testModel')}
-              {brand === 'codex' || isClaudeLikeBrand(brand) || brand === 'gemini' ? (
+              {brand === 'codex' ||
+              brand === 'xai' ||
+              isClaudeLikeBrand(brand) ||
+              brand === 'gemini' ||
+              brand === 'interactions' ? (
                 <span className={styles.labelHint}>
                   {' '}
                   · {t('providersPage.form.testModelClaudeHint')}
@@ -693,7 +805,7 @@ export function BaseProviderForm({
         ) : null}
       </div>
 
-      {/* Advanced collapsible sections */}
+      {/* 高级折叠区 */}
       {descriptor.supportsApiKeyEntries && form.apiKeyEntries ? (
         <Collapsible
           label={t('providersPage.form.apiKeyEntriesSection')}
@@ -829,7 +941,8 @@ export function BaseProviderForm({
             ) : null}
             <ModelEntriesEditor
               models={modelsList}
-              extendedOptions={supportsOpenAIModelOptions}
+              supportsImage={supportsModelImage}
+              supportsThinking
               mutating={mutating}
               removeDisabled={modelsList.length <= 1}
               onUpdate={updateModelEntry}
@@ -843,14 +956,17 @@ export function BaseProviderForm({
       {descriptor.supportsExcludedModels ? (
         <Collapsible label={t('providersPage.form.excludedSection')}>
           <div className={styles.field}>
-            <span className={styles.labelHint}>{t('providersPage.form.excludedHint')}</span>
-            <textarea
-              className={styles.textarea}
-              rows={4}
-              value={form.excludedModelsText}
-              onChange={(e) => updateField('excludedModelsText', e.target.value)}
+            <ExcludedModelsPicker
+              value={excludedRules}
+              onChange={(next) => updateField('excludedModelsText', formatExcludedRulesText(next))}
+              candidates={excludedCandidates}
+              catalogState={excludedCatalogState}
+              onRetryCatalog={discovery.available ? () => void discovery.fetch() : undefined}
               disabled={mutating}
-              placeholder="model-1&#10;model-2"
+              // `'*'` = 该 provider 已停用，唯一所有者是下面的 Disabled 开关。
+              // 传进来后 picker 双向过滤它，用户手打 `*` 也会被拦下并解释原因。
+              reservedRules={DISABLE_ALL_RULES}
+              reservedRuleMessage={t('providersPage.form.excludedDisabledNote')}
             />
           </div>
         </Collapsible>

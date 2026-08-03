@@ -16,8 +16,10 @@ import {
 } from '@/components/ui/icons';
 import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
+import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
 import type { ModelInfo } from '@/utils/models';
 import type { ApiKeyFunUsageSummary } from '../../sponsor';
+import { readThinkingLevels } from '../../thinkingLevels';
 import { isSponsorPartialMutationError } from '../../sponsorMutationRecovery';
 import {
   discoveryBrandForSponsorProtocol,
@@ -38,6 +40,7 @@ import type {
   SponsorProviderRaw,
 } from '../../types';
 import { ModelDiscoveryPanel } from './ModelDiscoveryPanel';
+import { ModelEntriesEditor } from './ModelEntriesEditor';
 import { useModelDiscovery, type UseModelDiscoveryResult } from './useModelDiscovery';
 import { useSponsorUsageCheck, type SponsorUsageMessages } from './useSponsorUsageCheck';
 import styles from './sharedForm.module.scss';
@@ -56,6 +59,7 @@ interface SponsorProviderFormProps {
 interface SponsorModelSectionProps {
   label: string;
   description: string;
+  protocol: SponsorProtocol;
   models: ModelEntryInput[];
   discovery: UseModelDiscoveryResult;
   mutating: boolean;
@@ -90,6 +94,7 @@ const emptySponsorKeyEntry = (
   disabled: false,
   disableCooling: false,
   priority: undefined,
+  weight: undefined,
   models: [emptyModel()],
 });
 
@@ -103,6 +108,7 @@ const emptySponsorForm = (definition: SponsorProviderDefinition): ProviderEntryF
   disabled: false,
   disableCooling: false,
   priority: undefined,
+  weight: undefined,
   models: [],
   headers: [],
   excludedModelsText: '',
@@ -139,7 +145,14 @@ const isHealthyUsageSummary = (summary: ApiKeyFunUsageSummary): boolean => {
 
 const modelsFromConfig = (
   models:
-    | Array<{ name?: string; alias?: string; priority?: number; testModel?: string }>
+    | Array<{
+        name?: string;
+        alias?: string;
+        priority?: number;
+        testModel?: string;
+        image?: boolean;
+        thinking?: Record<string, unknown>;
+      }>
     | undefined
 ): ModelEntryInput[] =>
   models?.length
@@ -148,6 +161,9 @@ const modelsFromConfig = (
         alias: model.alias ?? '',
         priority: model.priority,
         testModel: model.testModel,
+        image: model.image === true,
+        thinkingJson: model.thinking ? JSON.stringify(model.thinking, null, 2) : '',
+        thinkingLevels: readThinkingLevels(model.thinking),
       }))
     : [emptyModel()];
 
@@ -167,6 +183,7 @@ const sponsorEntryFromProviderKey = (
   disabled: hasDisableAllModelsRule(config.excludedModels),
   disableCooling: config.disableCooling === true,
   priority: config.priority,
+  weight: config.weight,
   models: modelsFromConfig(config.models),
 });
 
@@ -184,6 +201,7 @@ const sponsorEntryFromOpenAI = (
     disabled: config.disabled === true,
     disableCooling: config.disableCooling === true,
     priority: config.priority,
+    weight: firstEntry?.weight,
     models: modelsFromConfig(config.models),
   };
 };
@@ -240,6 +258,7 @@ const applyDiscoveredModels = (
 function SponsorModelSection({
   label,
   description,
+  protocol,
   models,
   discovery,
   mutating,
@@ -262,17 +281,6 @@ function SponsorModelSection({
     if (!discovery.loading && !discovery.hasFetched) {
       void discovery.fetch();
     }
-  };
-
-  const updateModelEntry = (modelIndex: number, patch: Partial<ModelEntryInput>) => {
-    onChange(
-      modelsList.map((item, itemIndex) => (itemIndex === modelIndex ? { ...item, ...patch } : item))
-    );
-  };
-
-  const removeModelEntry = (modelIndex: number) => {
-    const next = modelsList.filter((_, itemIndex) => itemIndex !== modelIndex);
-    onChange(next.length ? next : [emptyModel()]);
   };
 
   return (
@@ -303,41 +311,25 @@ function SponsorModelSection({
             onClose={() => setDiscoveryOpen(false)}
           />
         ) : null}
-        {modelsList.map((entry, modelIndex) => (
-          <div key={modelIndex} className={styles.modelAliasRow}>
-            <input
-              className={styles.input}
-              placeholder="model-name"
-              value={entry.name}
-              onChange={(event) => updateModelEntry(modelIndex, { name: event.target.value })}
-              disabled={mutating}
-            />
-            <input
-              className={styles.input}
-              placeholder="alias (optional)"
-              value={entry.alias ?? ''}
-              onChange={(event) => updateModelEntry(modelIndex, { alias: event.target.value })}
-              disabled={mutating}
-            />
-            <button
-              type="button"
-              className={styles.removeBtn}
-              disabled={mutating || modelsList.length <= 1}
-              onClick={() => removeModelEntry(modelIndex)}
-            >
-              <IconX size={12} />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          className={styles.addBtn}
-          disabled={mutating}
-          onClick={() => onChange([...modelsList, emptyModel()])}
-        >
-          <IconPlus size={12} />
-          <span>{t('providersPage.form.addModel')}</span>
-        </button>
+        <ModelEntriesEditor
+          models={modelsList}
+          supportsImage={protocol === 'openai'}
+          supportsThinking
+          mutating={mutating}
+          removeDisabled={modelsList.length <= 1}
+          onUpdate={(modelIndex, patch) =>
+            onChange(
+              modelsList.map((item, itemIndex) =>
+                itemIndex === modelIndex ? { ...item, ...patch } : item
+              )
+            )
+          }
+          onAdd={() => onChange([...modelsList, emptyModel()])}
+          onRemove={(modelIndex) => {
+            const next = modelsList.filter((_, itemIndex) => itemIndex !== modelIndex);
+            onChange(next.length ? next : [emptyModel()]);
+          }}
+        />
       </div>
     </Collapsible>
   );
@@ -699,6 +691,28 @@ function SponsorKeyEntryCard({
             </div>
           </div>
 
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={`${formId}-group-${index}-weight`}>
+              {t('providersPage.form.weight')}
+            </label>
+            <input
+              id={`${formId}-group-${index}-weight`}
+              type="number"
+              step="1"
+              max={MAX_CREDENTIAL_WEIGHT}
+              className={styles.input}
+              value={entry.weight ?? ''}
+              placeholder="1"
+              onChange={(event) =>
+                updateEntry({
+                  weight: event.target.value === '' ? undefined : Number(event.target.value),
+                })
+              }
+              disabled={mutating}
+            />
+            <span className={styles.labelHint}>{t('providersPage.form.weightHint')}</span>
+          </div>
+
           <label className={styles.checkboxRow}>
             <input
               type="checkbox"
@@ -730,6 +744,7 @@ function SponsorKeyEntryCard({
           <SponsorModelSection
             label={t(`providersPage.sponsor.protocolModels.${modelKey}`)}
             description={t(`providersPage.sponsor.protocolModelHints.${modelKey}`)}
+            protocol={entry.protocol}
             models={entry.models}
             discovery={discovery}
             mutating={mutating}
@@ -824,6 +839,16 @@ export function SponsorProviderForm({
     const protocolSet = new Set(entries.map((entry) => entry.protocol));
     if (protocolSet.size !== entries.length) {
       return t('providersPage.sponsor.validation.protocolDuplicate');
+    }
+    if (
+      entries.some((entry) => entry.weight !== undefined && !Number.isSafeInteger(entry.weight))
+    ) {
+      return t('providersPage.form.validation.weightInteger');
+    }
+    if (
+      entries.some((entry) => entry.weight !== undefined && entry.weight > MAX_CREDENTIAL_WEIGHT)
+    ) {
+      return t('providersPage.form.validation.weightMax', { max: MAX_CREDENTIAL_WEIGHT });
     }
     return null;
   };

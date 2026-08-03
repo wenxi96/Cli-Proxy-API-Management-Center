@@ -15,6 +15,7 @@ export interface ModelAlias {
 export interface ApiKeyEntry {
   apiKey: string;
   proxyUrl?: string;
+  weight?: number;
   authIndex?: string;
 }
 
@@ -28,6 +29,7 @@ export interface CloakConfig {
 export interface GeminiKeyConfig {
   apiKey: string;
   priority?: number;
+  weight?: number;
   prefix?: string;
   // 凭证在统计/日志中的展示名；留空则回退到 prefix，再回退到 "Gemini #N"。
   displayName?: string;
@@ -43,6 +45,7 @@ export interface GeminiKeyConfig {
 export interface ProviderKeyConfig {
   apiKey: string;
   priority?: number;
+  weight?: number;
   prefix?: string;
   // 凭证在统计/日志中的展示名；留空则回退到 prefix，再回退到 "{Provider} #N"。
   displayName?: string;
@@ -70,6 +73,8 @@ export interface OpenAIProviderConfig {
   testModel?: string;
   disableCooling?: boolean;
   authIndex?: string;
+  /** Original index in the backend openai-compatibility array. */
+  sourceIndex?: number;
   [key: string]: unknown;
 }
 

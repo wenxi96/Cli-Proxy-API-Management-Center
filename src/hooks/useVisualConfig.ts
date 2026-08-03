@@ -569,6 +569,20 @@ function parseStringList(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.map((item) => String(item ?? '').trim()).filter(Boolean) : [];
 }
 
+export function parseRoutingStrategy(raw: unknown):
+  | 'round-robin'
+  | 'weighted-round-robin'
+  | 'fill-first' {
+  const normalized = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (['weighted-round-robin', 'weightedroundrobin', 'wrr'].includes(normalized)) {
+    return 'weighted-round-robin';
+  }
+  if (['fill-first', 'fillfirst', 'ff'].includes(normalized)) return 'fill-first';
+  return 'round-robin';
+}
+
 function parseScopedPoolNumber(raw: unknown): string {
   if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
   if (typeof raw === 'string' && raw.trim() !== '') return raw.trim();
@@ -1358,7 +1372,7 @@ export function useVisualConfig() {
         ),
         quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
-        routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
+        routingStrategy: parseRoutingStrategy(routing?.strategy),
         routingScopedPoolEnabled: inferScopedPoolEnabled(scopedPool),
         routingScopedPoolDefaultsLimit: parseScopedPoolNumber(
           asRecord(scopedPool?.defaults)?.limit

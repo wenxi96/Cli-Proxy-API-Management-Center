@@ -35,6 +35,23 @@ import {
   getQiniuCloudProtocolUrls,
   resolveQiniuCloudBaseUrl,
 } from './qiniuCloud';
+import {
+  LMU_AI_AFFILIATE_URL,
+  LMU_AI_BASE_URL_OPTIONS,
+  LMU_AI_DISPLAY_NAME,
+  LMU_AI_PROTOCOL_LABELS,
+  LMU_AI_PROVIDER_NAME,
+  getLmuAIProtocolUrls,
+  resolveLmuAIBaseUrl,
+} from './lmuAI';
+import {
+  KIMI_BASE_URL_OPTIONS,
+  KIMI_DISPLAY_NAME,
+  KIMI_PROTOCOL_LABELS,
+  KIMI_PROVIDER_NAME,
+  getKimiProtocolUrls,
+  resolveKimiBaseUrl,
+} from './kimi';
 import type {
   ProviderBrand,
   SponsorProtocol,
@@ -63,7 +80,7 @@ export interface SponsorProviderDefinition {
   brand: SponsorProviderBrand;
   displayName: string;
   providerName: string;
-  affiliateUrl: string;
+  affiliateUrl?: string;
   dashboardUrl?: string;
   protocols: readonly SponsorProtocol[];
   protocolLabels: readonly string[];
@@ -128,10 +145,40 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
     resolveBaseUrl: resolveQiniuCloudBaseUrl,
     getProtocolUrls: getQiniuCloudProtocolUrls,
   },
+  lmuAI: {
+    brand: 'lmuAI',
+    displayName: LMU_AI_DISPLAY_NAME,
+    providerName: LMU_AI_PROVIDER_NAME,
+    affiliateUrl: LMU_AI_AFFILIATE_URL,
+    protocols: ['openai', 'claude', 'gemini', 'codex'],
+    protocolLabels: LMU_AI_PROTOCOL_LABELS,
+    defaultProtocol: 'openai',
+    baseUrlOptions: LMU_AI_BASE_URL_OPTIONS,
+    supportsUsageCheck: false,
+    resolveBaseUrl: resolveLmuAIBaseUrl,
+    getProtocolUrls: getLmuAIProtocolUrls,
+  },
+  kimi: {
+    brand: 'kimi',
+    displayName: KIMI_DISPLAY_NAME,
+    providerName: KIMI_PROVIDER_NAME,
+    protocols: ['openai', 'claude'],
+    protocolLabels: KIMI_PROTOCOL_LABELS,
+    defaultProtocol: 'openai',
+    baseUrlOptions: KIMI_BASE_URL_OPTIONS,
+    supportsUsageCheck: false,
+    resolveBaseUrl: resolveKimiBaseUrl,
+    getProtocolUrls: getKimiProtocolUrls,
+  },
 };
 
 export const isMultiProtocolSponsorBrand = (brand: ProviderBrand): brand is SponsorProviderBrand =>
-  brand === 'apikeyFun' || brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud';
+  brand === 'apikeyFun' ||
+  brand === 'code0' ||
+  brand === 'fennoAI' ||
+  brand === 'qiniuCloud' ||
+  brand === 'lmuAI' ||
+  brand === 'kimi';
 
 export type SponsorAggregationConflict = 'multiple-configs' | 'multiple-openai-keys';
 
