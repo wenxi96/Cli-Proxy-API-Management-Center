@@ -24,6 +24,8 @@ export interface AuthFileItem {
   name: string;
   type?: AuthFileType | string;
   provider?: string;
+  email?: string;
+  projectId?: string;
   size?: number;
   authIndex?: string | number | null;
   runtimeOnly?: boolean | string;
@@ -33,6 +35,13 @@ export interface AuthFileItem {
   statusMessage?: string;
   lastRefresh?: string | number;
   modified?: number;
+  priority?: number;
+  weight?: number;
+  note?: string;
+  success?: unknown;
+  failed?: unknown;
+  successCount?: number;
+  failureCount?: number;
   poolConfigured?: boolean;
   poolEnabled?: boolean;
   inPool?: boolean;
