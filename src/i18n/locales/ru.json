@@ -450,7 +450,7 @@
     "plan_label": "Тариф",
     "expires_label": "Истекает",
     "reset_credits_label": "Ручные сбросы",
-    "reset_credits_expiry_label": "Срок действия ручных сбросов (GMT+8)",
+    "reset_credits_expiry_label": "Срок действия ручных сбросов ({{timezone}})",
     "reset_credit_number": "Сброс {{index}}",
     "reset_credits_expiry_failed": "Не удалось загрузить срок действия ручных сбросов: {{message}}",
     "reset_credits_invalid_payload": "Недопустимый ответ о сроке действия ручных сбросов",
@@ -818,6 +818,21 @@
   },
   "config_management": {
     "title": "Панель конфигурации",
+    "meta_fields": "Настроек: {{count}}",
+    "meta_dirty": "Не сохранено: {{count}}",
+    "meta_dirty_source": "Несохранённые правки исходника",
+    "meta_errors": "Ошибок валидации: {{count}}",
+    "meta_synced": "Синхронизировано",
+    "actions": {
+      "discard": "Отменить изменения",
+      "save": "Сохранить изменения"
+    },
+    "discard_confirm_message": "Отменить все несохранённые изменения и восстановить последнюю версию с сервера?",
+    "mode": {
+      "label": "Режим редактора",
+      "visual": "Визуальный",
+      "source": "Исходный код"
+    },
     "reload": "Перезагрузить",
     "reload_confirm_message": "Перезагрузка отбросит ваши несохранённые изменения. Продолжить?",
     "save": "Сохранить",
@@ -851,26 +866,16 @@
       "confirm": "Подтвердить",
       "no_changes": "Изменений не обнаружено"
     },
-    "tabs": {
-      "visual": "Визуальный редактор",
-      "source": "Редактор файла"
-    },
     "visual": {
-      "notice": "Визуальный режим охватывает основные поля. Остальные параметры config.yaml по-прежнему нужно проверять или редактировать в режиме исходника.",
-      "quick_jump": "Быстрый переход",
-      "mode": {
-        "simple": "Простой",
-        "full": "Полный",
-        "label": "Режим редактора",
-        "more_settings": "Переключитесь в полный режим, чтобы увидеть все разделы ({{total}})",
-        "validation_banner": "В некоторых дополнительных параметрах есть ошибки проверки, сохранение заблокировано. Переключитесь в полный режим, чтобы исправить их.",
-        "switch_to_full": "Перейти в полный режим"
-      },
       "search": {
         "placeholder": "Поиск настроек (по названию или ключу YAML)",
         "no_results": "Нет подходящих настроек"
       },
       "sections": {
+        "common": {
+          "title": "Основные",
+          "description": "Самые востребованные настройки — те же данные, что и в полных разделах"
+        },
         "connectivity": {
           "title": "Доступ и аутентификация",
           "description": "Адрес сервера, порт, каталог аутентификации и ключи API"
@@ -883,11 +888,10 @@
           "title": "Дополнительно и эксперименты",
           "description": "Подмена заголовков, кэш подписей, источники плагинов и другие редко изменяемые настройки",
           "plugins_title": "Плагины",
-          "signature_title": "Подпись Antigravity"
+          "antigravity_title": "Antigravity",
+          "signature_title": "Проверка подписей"
         },
         "server": {
-          "title": "Настройки сервера",
-          "description": "Базовые параметры сервера",
           "host": "Адрес хоста",
           "port": "Порт"
         },
@@ -913,14 +917,10 @@
           "panel_repo": "Репозиторий панели"
         },
         "auth": {
-          "title": "Настройки аутентификации",
-          "description": "API-ключи и каталог аутентификации",
           "auth_dir": "Каталог auth-dir",
           "auth_dir_hint": "Путь к каталогу с файлами аутентификации (поддерживает ~)"
         },
         "system": {
-          "title": "Системные настройки",
-          "description": "Отладка, журналирование, статистика и производительность",
           "debug": "Режим отладки",
           "debug_desc": "Включить подробные отладочные журналы",
           "commercial_mode": "Коммерческий режим",
@@ -964,6 +964,11 @@
           "usage_statistics_enabled_desc": "Агрегировать статистику использования запросов в памяти",
           "redis_usage_retention": "Хранение очереди Redis usage (сек)",
           "redis_usage_retention_hint": "Время хранения вывода RESP LPOP/RPOP в памяти, максимум 3600 секунд",
+          "antigravity_sensitive_words": "Обфускация стоп-слов",
+          "antigravity_sensitive_words_desc": "Вставляет символы нулевой ширины в совпадающие слова системных инструкций Antigravity, затрудняя точное распознавание ключевых слов на стороне сервиса",
+          "antigravity_sensitive_words_label": "Стоп-слова (antigravity.sensitive-words)",
+          "antigravity_sensitive_words_placeholder": "proxy",
+          "antigravity_sensitive_words_hint": "Одно слово или фраза в строке. Регистр не учитывается; пустые значения удаляются, а значения короче 2 символов игнорируются backend",
           "antigravity_signature_cache": "Включить кэш подписей Antigravity",
           "antigravity_signature_cache_desc": "Предпочитать и проверять кэшированные подписи thinking-блоков",
           "antigravity_signature_strict": "Строгая проверка bypass-подписи",
@@ -988,6 +993,7 @@
           "title": "Сетевые настройки",
           "description": "Параметры прокси, повторов и маршрутизации",
           "proxy_url": "URL прокси",
+          "proxy_url_sponsor_hint": "Нет подходящего прокси?",
           "request_retry": "Количество повторов запросов",
           "max_retry_credentials": "Максимум учётных данных для повторов",
           "max_retry_credentials_hint": "Оставьте пустым, чтобы не задавать поле. Значение 0 сохраняет legacy-поведение и позволяет перебрать все доступные учётные данные.",
@@ -1065,7 +1071,15 @@
         "input_placeholder": "Вставьте API-ключ",
         "input_hint": "Меняет только содержимое локального файла конфигурации, не синхронизируется с интерфейсом управления API-ключами",
         "error_empty": "Введите API-ключ",
-        "error_invalid": "API-ключ содержит недопустимые символы"
+        "error_invalid": "API-ключ содержит недопустимые символы",
+        "strength": {
+          "label": "Надёжность API-ключа",
+          "empty": "Не введено",
+          "weak": "Слабый",
+          "fair": "Средний",
+          "good": "Хороший",
+          "strong": "Надёжный"
+        }
       },
       "payload_rules": {
         "rule": "Правило",
@@ -1139,6 +1153,9 @@
     "title": "Управление квотами",
     "description": "Следите за статусом квот OAuth для учётных данных Antigravity, Codex, Claude, Kimi и xAI.",
     "refresh_all_credentials": "Обновить все учётные данные",
+    "sort_label": "Сортировка",
+    "sort_default": "По умолчанию",
+    "sort_soonest": "Сначала ближайшее восстановление",
     "meta_credentials": "{{count}} учётных данных",
     "meta_loaded": "{{count}} загружено",
     "meta_attention": "{{count}} требуют внимания",
@@ -1159,6 +1176,11 @@
     "windows_legend_current": "текущее окно",
     "windows_legend_upcoming": "предстоящее",
     "windows_legend_elapsed": "прошедшее",
+    "windows_legend_reset_credit": "срок ручного сброса",
+    "soonest_row_hint": "Восстановится первым у этих учётных данных",
+    "windows_reset_credit": "Ручной сброс",
+    "windows_credit_granted": "Предоставлен",
+    "windows_credit_expires": "Истекает",
     "windows_note_weekly": "Каждая полоса — одно окно квоты, от открытия до сброса. Окна, заканчивающиеся вместе, конкурируют за одни и те же дни.",
     "windows_note_session": "Каждая полоса — одно 5-часовое окно. Показаны только учётные данные с активным окном; остальные остаются пустыми.",
     "weekday_sun": "Вс",
@@ -1427,7 +1449,7 @@
       "codex": "Codex",
       "xai": "xAI",
       "claude": "Claude",
-      "claudeApi": "ClaudeAPI",
+      "claudeApi": "Claudeapi.com",
       "vertex": "Vertex",
       "openaiCompatibility": "OpenAI-совместимый",
       "apikeyFun": "APIKEY.FUN",
@@ -1435,6 +1457,7 @@
       "fennoAI": "FennoAI",
       "qiniuCloud": "Qiniu Cloud",
       "lmuAI": "LMU AI (Lingmou AI)",
+      "infistar": "Infistar",
       "kimi": "Kimi"
     },
     "table": {
@@ -1451,6 +1474,7 @@
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
+      "cliProfileTag": "CLI-профиль",
       "empty": "Нет ресурсов, нажмите \"Создать\".",
       "filterPlaceholder": "Поиск по ключам, URL, префиксам…",
       "description": "Управление ресурсами {{route}}"
@@ -1460,6 +1484,7 @@
       "detailHint": "{{provider}} сохраняется в соответствующие конфигурации API key по протоколам; здесь они управляются вместе.",
       "registerLink": "Зарегистрироваться",
       "registerNow": "Зарегистрироваться сейчас",
+      "kimiPromo": "Новые пользователи получают API-квоту в размере 10% от первого успешного пополнения, максимум ¥1000. Предложение действует до 30 сентября.",
       "dashboardLink": "Панель управления",
       "emptyRegisterHint": "Конфигурации пока нет.",
       "apiKeyHint": "Этот ключ записывается только в выбранную группу/протокол.",
@@ -1487,11 +1512,15 @@
         "standard": "Обычный URL",
         "direct": "Прямой URL",
         "domestic": "Маршрут для материкового Китая",
-        "overseas": "Зарубежный маршрут"
+        "overseas": "Зарубежный маршрут",
+        "mainlandChina": "Материковый Китай (рекомендуется)",
+        "global": "Глобальный"
       },
       "urlOptionDescriptions": {
         "domestic": "Для пользователей и нагрузок в материковом Китае; обычно дает меньшую задержку в сетях материкового Китая.",
-        "overseas": "Для зарубежных развертываний, трансграничного доступа или задач, которым нужны зарубежные модели."
+        "overseas": "Для зарубежных развертываний, трансграничного доступа или задач, которым нужны зарубежные модели.",
+        "mainlandChinaRecommended": "Рекомендуется для пользователей и нагрузок в сетях материкового Китая.",
+        "global": "Для пользователей и нагрузок во всех остальных регионах."
       },
       "modelsTitle": "Настройки моделей по протоколам",
       "modelsHint": "Настраивайте allowlist моделей и алиасы отдельно для маршрутов Codex API, Anthropic, Gemini и OpenAI-compatible.",
@@ -1605,8 +1634,10 @@
       },
       "cloakCacheUserId": "Кэшировать user_id",
       "cloakCacheUserIdHint": "Переиспользовать Claude cloak user_id для каждого API-ключа",
-      "experimentalCchSigning": "Экспериментальная CCH-подпись",
-      "experimentalCchSigningHint": "Подписывать финальное тело cloaked Claude /v1/messages через CCH",
+      "fingerprintProfile": "Отпечаток запроса",
+      "fingerprintProfileDefault": "По умолчанию (управляет клиент)",
+      "fingerprintProfileClaudeCodeCli": "Claude Code CLI",
+      "fingerprintProfileHint": "По умолчанию сохраняются prompt и заголовки клиента; можно включить отпечаток запросов Claude Code CLI.",
       "validation": {
         "nameRequired": "Название обязательно",
         "apiKeyRequired": "Нужен хотя бы один API-ключ",

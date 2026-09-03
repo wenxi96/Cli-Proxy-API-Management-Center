@@ -31,7 +31,7 @@ const classifyTier = (percent: number): TierId | null => {
   return null;
 };
 
-const buildTiers = (
+export const buildReenableTiers = (
   results: AuthFileBatchCheckResult[],
   reenableNames: string[]
 ): Tier[] => {
@@ -95,12 +95,12 @@ export function ReenableTieredModal({
   // forces a fresh mount, which makes the useState initializers below run again with
   // clean state. This avoids the react-hooks/set-state-in-effect anti-pattern.
   const tiers = useMemo<Tier[]>(
-    () => buildTiers(results, reenableNames),
+    () => buildReenableTiers(results, reenableNames),
     [results, reenableNames]
   );
   const [selectedNames, setSelectedNames] = useState<Set<string>>(() => new Set());
   const [expandedTiers, setExpandedTiers] = useState<Set<TierId>>(() =>
-    computeInitialExpansion(buildTiers(results, reenableNames))
+    computeInitialExpansion(buildReenableTiers(results, reenableNames))
   );
 
   const totalCandidates = useMemo(

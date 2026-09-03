@@ -70,7 +70,6 @@ import {
   buildXaiBillingSummary,
   mergeXaiBillingSummaries,
   createStatusError,
-  formatShanghaiDateTime,
   getStatusFromError,
   isAntigravityFile,
   isClaudeFile,
@@ -81,6 +80,7 @@ import {
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
 import { formatDateTimeValue } from '@/utils/format';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -973,10 +973,11 @@ const renderCodexItems = (
         h(
           'div',
           { className: styleMap.codexResetCreditsTitle },
-          t('codex_quota.reset_credits_expiry_label')
+          t('codex_quota.reset_credits_expiry_label', { timezone: resolveTimeZoneLabel() })
         ),
-        ...rateLimitResetCredits.map((credit, index) =>
-          h(
+        ...rateLimitResetCredits.map((credit, index) => {
+          const expiresLabel = formatQuotaResetTime(credit.expiresAt);
+          return h(
             'div',
             {
               key: credit.id || `${credit.expiresAt}-${index}`,
@@ -990,10 +991,10 @@ const renderCodexItems = (
             h(
               'span',
               { className: styleMap.codexResetCreditTime },
-              formatShanghaiDateTime(credit.expiresAt) || credit.expiresAt
+              expiresLabel === '-' ? credit.expiresAt : expiresLabel
             )
-          )
-        )
+          );
+        })
       )
     );
   } else if (rateLimitResetCreditsError) {
