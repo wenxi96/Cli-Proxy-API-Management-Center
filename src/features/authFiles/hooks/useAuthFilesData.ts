@@ -8,6 +8,10 @@ import { formatFileSize } from '@/utils/format';
 import { MAX_AUTH_FILE_SIZE } from '@/utils/constants';
 import { downloadBlob } from '@/utils/download';
 import {
+  executeAuthFileDownloadPlan,
+  mergeVisibleAuthFileSelection,
+} from '@/features/authFiles/logic';
+import {
   getTypeLabel,
   isProblemAuthFile,
   isRuntimeOnlyAuthFile,
@@ -70,6 +74,23 @@ export type UseAuthFilesDataResult = {
   batchDelete: (names: string[]) => void;
 };
 
+export type AuthFileArchiveDownloadActions = {
+  requestArchive: (names: string[]) => Promise<{ data: unknown }>;
+  saveBlob: (options: { filename: string; blob: Blob }) => void;
+};
+
+export const downloadAuthFileArchive = async (
+  names: string[],
+  actions: AuthFileArchiveDownloadActions
+): Promise<void> => {
+  const response = await actions.requestArchive(names);
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data as BlobPart], { type: 'application/zip' });
+  actions.saveBlob({ filename: `auth-files-${names.length}.zip`, blob });
+};
+
 export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFilesDataResult {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
@@ -116,15 +137,8 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
   }, []);
 
   const selectAllVisible = useCallback((visibleFiles: AuthFileItem[]) => {
-    const nextSelected = visibleFiles
-      .filter((file) => !isRuntimeOnlyAuthFile(file))
-      .map((file) => file.name);
-    if (nextSelected.length === 0) return;
-    setSelectedFiles((prev) => {
-      const next = new Set(prev);
-      nextSelected.forEach((name) => next.add(name));
-      return next;
-    });
+    if (!visibleFiles.some((file) => !isRuntimeOnlyAuthFile(file))) return;
+    setSelectedFiles((prev) => mergeVisibleAuthFileSelection(prev, visibleFiles));
   }, []);
 
   const invertVisibleSelection = useCallback((visibleFiles: AuthFileItem[]) => {
@@ -665,27 +679,27 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
 
   const batchDownload = useCallback(
     async (names: string[]) => {
-      const uniqueNames = Array.from(new Set(names));
-      if (uniqueNames.length === 0) return;
-
-      if (uniqueNames.length === 1) {
-        await handleDownload(uniqueNames[0]);
-        deselectAll();
-        return;
-      }
-
+      let plan;
       try {
-        const response = await authFilesApi.downloadArchive(uniqueNames);
-        const blob =
-          response.data instanceof Blob
-            ? response.data
-            : new Blob([response.data as BlobPart], { type: 'application/zip' });
-        downloadBlob({ filename: `auth-files-${uniqueNames.length}.zip`, blob });
-        showNotification(t('auth_files.batch_download_success', { count: uniqueNames.length }), 'success');
+        plan = await executeAuthFileDownloadPlan(names, {
+          downloadSingle: handleDownload,
+          downloadArchive: async (archiveNames) => {
+            await downloadAuthFileArchive(archiveNames, {
+              requestArchive: authFilesApi.downloadArchive,
+              saveBlob: downloadBlob,
+            });
+            showNotification(
+              t('auth_files.batch_download_success', { count: archiveNames.length }),
+              'success'
+            );
+          },
+        });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '';
         showNotification(`${t('notification.download_failed')}: ${message}`, 'error');
+        return;
       }
+      if (!plan) return;
 
       // 与 batchSetStatus 保持一致：批量动作完成后清空选择
       deselectAll();

@@ -4,9 +4,91 @@
  */
 
 import type { AuthFileItem } from '@/types';
-import { normalizeProviderKey } from './constants';
+import { isRuntimeOnlyAuthFile, normalizeProviderKey } from './constants';
 import { deriveAuthFileIdentity } from './identity';
 import type { AuthFilesSortMode } from './uiState';
+
+export type AuthFileDownloadPlan =
+  | { kind: 'single'; name: string }
+  | { kind: 'archive'; names: string[] };
+
+export type AuthFileDownloadActions = {
+  downloadSingle: (name: string) => Promise<void>;
+  downloadArchive: (names: string[]) => Promise<void>;
+};
+
+export const createAuthFileDownloadPlan = (
+  names: Iterable<string>
+): AuthFileDownloadPlan | null => {
+  const seen = new Set<string>();
+  const uniqueNames: string[] = [];
+
+  for (const rawName of names) {
+    const name = String(rawName ?? '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    uniqueNames.push(name);
+  }
+
+  if (uniqueNames.length === 0) return null;
+  if (uniqueNames.length === 1) return { kind: 'single', name: uniqueNames[0] };
+  return { kind: 'archive', names: uniqueNames };
+};
+
+export const executeAuthFileDownloadPlan = async (
+  names: Iterable<string>,
+  actions: AuthFileDownloadActions
+): Promise<AuthFileDownloadPlan | null> => {
+  const plan = createAuthFileDownloadPlan(names);
+  if (!plan) return null;
+
+  if (plan.kind === 'single') {
+    await actions.downloadSingle(plan.name);
+  } else {
+    await actions.downloadArchive(plan.names);
+  }
+
+  return plan;
+};
+
+export const mergeVisibleAuthFileSelection = (
+  selectedNames: Iterable<string>,
+  visibleFiles: AuthFileItem[]
+): Set<string> => {
+  const next = new Set(selectedNames);
+  visibleFiles.forEach((file) => {
+    if (!isRuntimeOnlyAuthFile(file)) next.add(file.name);
+  });
+  return next;
+};
+
+export type AuthFilePoolStatus = {
+  enabled: boolean;
+  state: string;
+  reason: string;
+  remainingPercent: number | undefined;
+  visible: boolean;
+};
+
+export const getAuthFilePoolStatus = (file: AuthFileItem): AuthFilePoolStatus => {
+  const enabled = file.poolEnabled === true || file['pool_enabled'] === true;
+  const state = String(file.poolState ?? file['pool_state'] ?? '').trim();
+  const reason = String(file.poolReason ?? file['pool_reason'] ?? '').trim();
+  const remainingPercent =
+    typeof file.poolRemainingPercent === 'number'
+      ? file.poolRemainingPercent
+      : typeof file['pool_remaining_percent'] === 'number'
+        ? (file['pool_remaining_percent'] as number)
+        : undefined;
+
+  return {
+    enabled,
+    state,
+    reason,
+    remainingPercent,
+    visible: Boolean(enabled || state || reason || remainingPercent !== undefined),
+  };
+};
 
 const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

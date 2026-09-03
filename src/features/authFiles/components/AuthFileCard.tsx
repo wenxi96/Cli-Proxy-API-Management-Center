@@ -34,6 +34,7 @@ import {
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import { deriveAuthFileIdentity } from '@/features/authFiles/identity';
+import { getAuthFilePoolStatus } from '@/features/authFiles/logic';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileBatchQuotaSection } from '@/features/authFiles/components/AuthFileBatchQuotaSection';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
@@ -173,20 +174,14 @@ export function AuthFileCard(props: AuthFileCardProps) {
           ? legacyStyles.batchCheckBadgeDanger
           : legacyStyles.batchCheckBadgeMuted;
 
-  const poolEnabled = file.poolEnabled === true || file['pool_enabled'] === true;
-  const poolState = String(file.poolState ?? file['pool_state'] ?? '').trim();
-  const poolReason = String(file.poolReason ?? file['pool_reason'] ?? '').trim();
-  const poolRemainingPercent =
-    typeof file.poolRemainingPercent === 'number'
-      ? file.poolRemainingPercent
-      : typeof file['pool_remaining_percent'] === 'number'
-        ? (file['pool_remaining_percent'] as number)
-        : undefined;
-  const poolStateKey = poolEnabled && poolState ? getScopedPoolStateKey(poolState) : 'unmanaged';
-  const poolReasonKey = getScopedPoolReasonKey(poolReason);
-  const poolStateLabel = poolEnabled || poolState ? t(`auth_files.pool_state_${poolStateKey}`) : '';
+  const poolStatus = getAuthFilePoolStatus(file);
+  const poolStateKey =
+    poolStatus.enabled && poolStatus.state ? getScopedPoolStateKey(poolStatus.state) : 'unmanaged';
+  const poolReasonKey = getScopedPoolReasonKey(poolStatus.reason);
+  const poolStateLabel =
+    poolStatus.enabled || poolStatus.state ? t(`auth_files.pool_state_${poolStateKey}`) : '';
   const poolReasonLabel = poolReasonKey !== 'none' ? t(`auth_files.pool_reason_${poolReasonKey}`) : '';
-  const showPoolStatus = Boolean(poolStateLabel || poolReasonLabel || poolRemainingPercent !== undefined);
+  const showPoolStatus = poolStatus.visible;
 
   // 挂载时捕获一次入场延迟：父级随后传 null 也不会中断已开始的动画
   const [mountEntranceDelayMs] = useState<number | null>(entranceDelayMs ?? null);
@@ -317,9 +312,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
               {poolReasonLabel}
             </span>
           ) : null}
-          {poolRemainingPercent !== undefined ? (
+          {poolStatus.remainingPercent !== undefined ? (
             <span className={`${legacyStyles.batchCheckBadge} ${legacyStyles.batchCheckBadgeOutline}`}>
-              {t('auth_files.pool_remaining_percent', { value: poolRemainingPercent })}
+              {t('auth_files.pool_remaining_percent', { value: poolStatus.remainingPercent })}
             </span>
           ) : null}
         </div>

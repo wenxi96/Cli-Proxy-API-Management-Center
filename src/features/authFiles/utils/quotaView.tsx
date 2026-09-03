@@ -14,10 +14,10 @@ import { formatDateTime, formatDateTimeValue, formatNumber } from '@/utils/forma
 import {
   formatKimiResetHint,
   formatQuotaResetTime,
-  formatShanghaiDateTime,
   normalizePlanType,
 } from '@/utils/quota';
 import { CLAUDE_USAGE_WINDOW_KEYS } from '@/utils/quota/constants';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import {
   ANTIGRAVITY_BUCKET_LABEL_KEYS,
   ANTIGRAVITY_GROUP_LABEL_KEYS,
@@ -536,16 +536,19 @@ const codexStateToQuotaView = (quota: CodexQuotaState, t: TFunction): Normalized
   let resetCredits: NormalizedQuotaResetCredits | undefined;
   if (rateLimitResetCredits.length > 0) {
     resetCredits = {
-      title: t('codex_quota.reset_credits_expiry_label'),
-      items: rateLimitResetCredits.map((credit, index) => ({
-        key: credit.id || `${credit.expiresAt}-${index}`,
-        label: t('codex_quota.reset_credit_number', { index: index + 1 }),
-        time: formatShanghaiDateTime(credit.expiresAt) || credit.expiresAt,
-      })),
+      title: t('codex_quota.reset_credits_expiry_label', { timezone: resolveTimeZoneLabel() }),
+      items: rateLimitResetCredits.map((credit, index) => {
+        const expiresLabel = formatQuotaResetTime(credit.expiresAt);
+        return {
+          key: credit.id || `${credit.expiresAt}-${index}`,
+          label: t('codex_quota.reset_credit_number', { index: index + 1 }),
+          time: expiresLabel === '-' ? credit.expiresAt : expiresLabel,
+        };
+      }),
     };
   } else if (rateLimitResetCreditsError) {
     resetCredits = {
-      title: t('codex_quota.reset_credits_expiry_label'),
+      title: t('codex_quota.reset_credits_expiry_label', { timezone: resolveTimeZoneLabel() }),
       items: [],
       error: t('codex_quota.reset_credits_expiry_failed', { message: rateLimitResetCreditsError }),
     };

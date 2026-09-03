@@ -2,8 +2,11 @@
 //
 // IMPORTANT: this index is maintained by hand and is NOT what drives field
 // rendering — it only powers search. When you add, remove, or move a field in
-// VisualConfigEditor.tsx, update the matching entry here (and wrap the field's
-// JSX in <FieldAnchor fieldId="..."> using the same `fieldId`).
+// components/sections/*.tsx (or fields/sharedFields.tsx), update the matching
+// entry here, wrap the field's JSX in <FieldAnchor fieldId="..."> with the same
+// `fieldId`, and map it in constants.ts FIELD_VALUE_KEYS.
+// tests/configFieldParity.test.ts enforces the three-way parity — a missing or
+// extra entry anywhere fails CI.
 
 export type VisualSectionId =
   'connectivity' | 'network' | 'logging' | 'quota' | 'streaming' | 'advanced' | 'payload';
@@ -400,6 +403,14 @@ export const CONFIG_FIELD_SEARCH_INDEX: ConfigFieldSearchEntry[] = [
     yamlKeys: ['plugins', 'store-auth'],
   },
   {
+    fieldId: 'antigravitySensitiveWords',
+    sectionId: 'advanced',
+    labelKey: L('sections.system.antigravity_sensitive_words'),
+    hintKey: L('sections.system.antigravity_sensitive_words_desc'),
+    yamlKeys: ['antigravity', 'sensitive-words'],
+    keywords: ['antigravity', 'obfuscate', 'zero-width'],
+  },
+  {
     fieldId: 'antigravitySignatureCacheEnabled',
     sectionId: 'advanced',
     labelKey: L('sections.system.antigravity_signature_cache'),
@@ -487,6 +498,13 @@ export const CONFIG_FIELD_SEARCH_INDEX: ConfigFieldSearchEntry[] = [
     qualifierKey: L('sections.headers.codex_title'),
     yamlKeys: ['codex-header-defaults', 'beta-features'],
     keywords: ['codex'],
+  },
+  {
+    fieldId: 'codexIdentityConfuse',
+    sectionId: 'advanced',
+    labelKey: L('sections.headers.identity_confuse'),
+    yamlKeys: ['codex', 'identity-confuse'],
+    keywords: ['codex', 'identity'],
   },
   // ── payload (coarse: one entry per rule group) ──────────────────────────────
   {
