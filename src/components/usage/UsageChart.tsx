@@ -56,9 +56,13 @@ export function UsageChart({
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : chartData.hasData === false ? (
         <div className={styles.hint}>
-          {(chartData.unknownUsageCount ?? 0) > 0
-            ? t('usage_stats.token_coverage_unknown')
-            : emptyText}
+          {chartData.availability === 'unavailable'
+            ? t('usage_stats.series_unavailable', {
+                code: chartData.seriesError?.code ?? 'series_unavailable',
+              })
+            : (chartData.unknownUsageCount ?? 0) > 0
+              ? t('usage_stats.token_coverage_unknown')
+              : emptyText}
         </div>
       ) : chartData.labels.length > 0 ? (
         <div className={styles.chartWrapper}>

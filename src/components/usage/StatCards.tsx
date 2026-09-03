@@ -29,6 +29,7 @@ import {
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
 import type { SparklineBundle } from './hooks/useSparklines';
+import type { SummaryDashboard } from '@/utils/usage/summaryAdapter';
 import styles from '@/pages/UsagePage.module.scss';
 
 interface StatCardData {
@@ -45,6 +46,7 @@ interface StatCardData {
 
 export interface StatCardsProps {
   usage: UsagePayload | null;
+  dashboard?: SummaryDashboard | null;
   loading: boolean;
   modelPrices: ModelPriceOverrides;
   nowMs: number;
@@ -81,6 +83,7 @@ const getCostStatusLabelKey = (status: CostStatus) => {
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
   if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  if (status === 'policy_unavailable') return 'usage_stats.cost_status_policy_unavailable';
   return 'usage_stats.cost_status_complete';
 };
 
@@ -89,9 +92,9 @@ const getTokenCoverageLabelKey = (status: UsageCoverageStatus) =>
     ? 'usage_stats.token_coverage_partial'
     : 'usage_stats.token_coverage_unknown';
 
-export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: StatCardsProps) {
+export function StatCards({ usage, dashboard, loading, modelPrices, nowMs, sparklines }: StatCardsProps) {
   const { t } = useTranslation();
-  const totalTokens = parseNonNegativeNumber(usage?.total_tokens) ?? 0;
+  const totalTokens = dashboard?.totalTokens ?? (parseNonNegativeNumber(usage?.total_tokens) ?? 0);
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
@@ -119,6 +122,31 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
         sampleCount: 0,
       },
     };
+
+    if (dashboard) {
+      return {
+        tokenBreakdown: {
+          cachedTokens: dashboard.tokenBreakdown.cachedTokens,
+          reasoningTokens: dashboard.tokenBreakdown.reasoningTokens,
+        },
+        tokenCoverageStatus: dashboard.tokenCoverageStatus,
+        rateTokenCoverageStatus: 'unknown' as UsageCoverageStatus,
+        rateStats: {
+          rpm: 0,
+          tpm: 0,
+          windowMinutes: 30,
+          requestCount: 0,
+          tokenCount: 0,
+        },
+        totalCost: dashboard.totalCost,
+        totalCostStatus: dashboard.totalCostStatus,
+        latencyStats: {
+          averageMs: dashboard.averageLatencyMs,
+          totalMs: null,
+          sampleCount: dashboard.averageLatencyMs === null ? 0 : 1,
+        },
+      };
+    }
 
     if (!usage) return empty;
     const now = nowMs;
@@ -203,7 +231,7 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       totalCostStatus: costSummary.costStatus,
       latencyStats,
     };
-  }, [modelPrices, nowMs, usage]);
+  }, [dashboard, modelPrices, nowMs, usage]);
 
   const statsCards: StatCardData[] = [
     {
@@ -213,16 +241,26 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#8b8680',
       accentSoft: 'rgba(139, 134, 128, 0.18)',
       accentBorder: 'rgba(139, 134, 128, 0.35)',
-      value: loading ? '-' : (usage?.total_requests ?? 0).toLocaleString(),
+      value: loading
+        ? '-'
+        : dashboard && !dashboard.numericDataComplete
+          ? '--'
+          : (dashboard?.totalRequests ?? usage?.total_requests ?? 0).toLocaleString(),
       meta: (
         <>
           <span className={styles.statMetaItem}>
             <span className={styles.statMetaDot} style={{ backgroundColor: '#10b981' }} />
-            {t('usage_stats.success_requests')}: {loading ? '-' : (usage?.success_count ?? 0)}
+            {t('usage_stats.success_requests')}:{' '}
+            {loading || (dashboard && !dashboard.numericDataComplete)
+              ? '--'
+              : (dashboard?.successCount ?? usage?.success_count ?? 0)}
           </span>
           <span className={styles.statMetaItem}>
             <span className={styles.statMetaDot} style={{ backgroundColor: '#c65746' }} />
-            {t('usage_stats.failed_requests')}: {loading ? '-' : (usage?.failure_count ?? 0)}
+            {t('usage_stats.failed_requests')}:{' '}
+            {loading || (dashboard && !dashboard.numericDataComplete)
+              ? '--'
+              : (dashboard?.failureCount ?? usage?.failure_count ?? 0)}
           </span>
           {latencyStats.sampleCount > 0 && (
             <span className={styles.statMetaItem} title={latencyHint}>
@@ -244,14 +282,14 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       value:
         loading
           ? '-'
-          : tokenCoverageStatus === 'unknown'
+          : (dashboard && !dashboard.numericDataComplete) || tokenCoverageStatus === 'unknown'
             ? '--'
             : formatCompactNumber(totalTokens),
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.cached_tokens')}:{' '}
-            {loading || tokenCoverageStatus === 'unknown'
+            {loading || (dashboard && !dashboard.numericDataComplete) || tokenCoverageStatus === 'unknown'
               ? '-'
               : formatCompactNumber(tokenBreakdown.cachedTokens)}
           </span>
@@ -277,11 +315,11 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#22c55e',
       accentSoft: 'rgba(34, 197, 94, 0.18)',
       accentBorder: 'rgba(34, 197, 94, 0.32)',
-      value: loading ? '-' : formatPerMinuteValue(rateStats.rpm),
+      value: loading || dashboard ? '-' : formatPerMinuteValue(rateStats.rpm),
       meta: (
         <span className={styles.statMetaItem}>
           {t('usage_stats.total_requests')}:{' '}
-          {loading ? '-' : rateStats.requestCount.toLocaleString()}
+          {loading || dashboard ? '-' : rateStats.requestCount.toLocaleString()}
         </span>
       ),
       trend: sparklines.rpm,
@@ -323,7 +361,12 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : totalCost !== null ? formatUsd(totalCost) : '--',
+      value:
+        loading || (dashboard && !dashboard.numericDataComplete)
+          ? '--'
+          : totalCost !== null
+            ? formatUsd(totalCost)
+            : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>

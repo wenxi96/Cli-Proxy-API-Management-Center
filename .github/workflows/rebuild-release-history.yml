@@ -133,6 +133,7 @@ jobs:
                     VERSION="${VERSION}" npm run build
                   fi
                   mv dist/index.html dist/management.html
+                  test -f dist/usageExportSink.service-worker.js
                 '
 
             python3 ./scripts/delete-release.py "${tag}"
@@ -146,7 +147,8 @@ jobs:
                 RELEASE_NOTES_FILE="${notes_file}" \
                 GH_TOKEN="${GH_TOKEN}" \
                 python3 ./scripts/publish-release.py \
-                "${build_dir}/dist/management.html"
+                "${build_dir}/dist/management.html" \
+                "${build_dir}/dist/usageExportSink.service-worker.js"
 
             git worktree remove --force "${build_dir}"
             rm -f "${notes_file}"

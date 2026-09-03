@@ -1,6 +1,11 @@
 import { parseTimestampMs } from '@/utils/timestamp';
 
-export type CostStatus = 'unknown_usage' | 'unconfigured' | 'partial' | 'complete';
+export type CostStatus =
+  | 'unknown_usage'
+  | 'unconfigured'
+  | 'partial'
+  | 'complete'
+  | 'policy_unavailable';
 export type TokenUsageSource = 'backend' | 'computed' | 'legacy' | 'unknown';
 export type CacheSplitStatus = 'none' | 'unsplit' | 'split' | 'partial';
 export type ReasoningCostMode = 'included' | 'separate' | 'unknown';
@@ -63,6 +68,8 @@ export interface NormalizedUsageDetail {
   tokens: NormalizedUsageTokens;
   thinking: UsageThinking | null;
   estimatedCostUsd: number | null;
+  /** Present on v2 event DTOs; absent on legacy detail payloads. */
+  billablePolicyVersion?: string;
   cost: NormalizedUsageCost;
   raw: unknown;
   __modelName: string;
@@ -450,6 +457,8 @@ export function normalizeUsageDetail(
   const model = readString(record.model, record.__modelName, options.model);
   const provider = readString(record.provider, options.provider);
   const latencyMs = readLatencyMs(record);
+  const billablePolicyVersionValue =
+    record.billable_policy_version ?? record.billablePolicyVersion;
 
   return {
     requestId: readString(record.request_id, record.requestId, record.id),
@@ -470,6 +479,9 @@ export function normalizeUsageDetail(
     tokens: normalizeUsageTokens(record.tokens ?? record, provider),
     thinking: normalizeUsageThinking(record.thinking),
     estimatedCostUsd: readEstimatedCost(record),
+    ...(billablePolicyVersionValue !== undefined
+      ? { billablePolicyVersion: readString(billablePolicyVersionValue) }
+      : {}),
     cost: { ...EMPTY_USAGE_COST },
     raw: value,
     __modelName: model,

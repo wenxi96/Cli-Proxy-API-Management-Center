@@ -1,9 +1,30 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
-import { usageApi, type UsageAuthSummary } from '@/services/api/usage';
+import {
+  USAGE_STATS_STALE_TIME_MS,
+  useNotificationStore,
+  useAuthStore,
+  isProjectionUnavailableError,
+  useUsageStatsStore,
+} from '@/stores';
+import {
+  usageApi,
+  type UsageAuthSummary,
+  type UsageEventItem,
+  type UsageEventsRequestOptions,
+  type UsageSummaryRequestOptions,
+} from '@/services/api/usage';
 import { downloadBlob } from '@/utils/download';
-import { loadModelPrices, saveModelPrices, type ModelPriceOverrides } from '@/utils/usage';
+import {
+  loadModelPrices,
+  saveModelPrices,
+  type ModelPriceOverrides,
+} from '@/utils/usage';
+import {
+  buildSummaryDashboard,
+  type SummaryDashboard,
+} from '@/utils/usage/summaryAdapter';
+import { buildUsageRangeQuery } from '@/utils/usage/serverRange';
 
 export interface UsagePayload {
   total_requests?: number;
@@ -15,17 +36,78 @@ export interface UsagePayload {
   [key: string]: unknown;
 }
 
+export type UsageLoadMode = 'manual' | 'automatic';
+
+type UsageSummaryRefreshState = {
+  summaryRange: Record<string, unknown> | null;
+  summaryAnchor: string | null;
+  summaryEtag: string | null;
+};
+
+type UsageEventsRefreshState = {
+  summaryRange: Record<string, unknown> | null;
+  summaryAnchor: string | null;
+};
+
+export const buildUsageSummaryLoadOptions = (
+  window: string,
+  mode: UsageLoadMode,
+  state: UsageSummaryRefreshState
+): UsageSummaryRequestOptions => {
+  const summaryWindow = typeof state.summaryRange?.window === 'string' ? state.summaryRange.window : null;
+  if (mode === 'automatic' && summaryWindow === window && state.summaryAnchor) {
+    return {
+      window,
+      anchor: state.summaryAnchor,
+      etag: state.summaryEtag ?? '',
+    };
+  }
+  // An empty ETag explicitly disables the store's implicit conditional request.
+  return { window, etag: '' };
+};
+
+export const buildUsageEventsLoadOptions = (
+  window: string,
+  state: UsageEventsRefreshState
+): UsageEventsRequestOptions | null => {
+  const rangeQuery = buildUsageRangeQuery(state.summaryRange, window, state.summaryAnchor);
+  if (!rangeQuery) return null;
+  return {
+    ...rangeQuery,
+    limit: 50,
+  };
+};
+
 export interface UseUsageDataReturn {
   usage: UsagePayload | null;
+  summary: Record<string, unknown> | null;
+  summaryDashboard: SummaryDashboard | null;
+  summaryStatus: ReturnType<typeof useUsageStatsStore.getState>['summaryStatus'];
+  summaryAnchor: string | null;
+  summaryRange: Record<string, unknown> | null;
+  summaryError: string | null;
+  legacyDegraded: boolean;
+  eventsLegacyDegraded: boolean;
+  events: UsageEventItem[];
+  eventsStatus: ReturnType<typeof useUsageStatsStore.getState>['eventsStatus'];
+  eventsHasMore: boolean;
+  eventsError: string | null;
+  eventsFallbackError: string | null;
+  loadUsageEvents: (options?: UsageEventsRequestOptions & { append?: boolean }) => Promise<void>;
+  catalog: Record<string, unknown> | null;
+  catalogStatus: ReturnType<typeof useUsageStatsStore.getState>['catalogStatus'];
   loading: boolean;
   error: string;
   lastRefreshedAt: Date | null;
   modelPrices: ModelPriceOverrides;
   setModelPrices: (prices: ModelPriceOverrides) => void;
-  loadUsage: () => Promise<void>;
+  loadUsage: (window?: string, mode?: UsageLoadMode) => Promise<void>;
   handleExport: () => Promise<void>;
   handleImport: () => void;
-  handleImportChange: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleImportChange: (
+    event: React.ChangeEvent<HTMLInputElement>,
+    window?: string
+  ) => Promise<void>;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   exporting: boolean;
   importing: boolean;
@@ -34,25 +116,69 @@ export interface UseUsageDataReturn {
 export function useUsageData(): UseUsageDataReturn {
   const { t } = useTranslation();
   const { showNotification } = useNotificationStore();
+  const connectionScopeKey = useAuthStore((state) => `${state.apiBase}::${state.managementKey}`);
   const usageSnapshot = useUsageStatsStore((state) => state.usage);
-  const loading = useUsageStatsStore((state) => state.loading);
+  const usageScopeKey = useUsageStatsStore((state) => state.scopeKey);
+  const summarySnapshot = useUsageStatsStore((state) => state.summary);
+  const summaryStatus = useUsageStatsStore((state) => state.summaryStatus);
+  const summaryAnchor = useUsageStatsStore((state) => state.summaryAnchor);
+  const summaryRange = useUsageStatsStore((state) => state.summaryRange);
+  const summaryError = useUsageStatsStore((state) => state.summaryError);
+  const events = useUsageStatsStore((state) => state.events);
+  const eventsStatus = useUsageStatsStore((state) => state.eventsStatus);
+  const eventsHasMore = useUsageStatsStore((state) => state.eventsHasMore);
+  const eventsError = useUsageStatsStore((state) => state.eventsError);
+  const loadUsageEvents = useUsageStatsStore((state) => state.loadUsageEvents);
+  const catalog = useUsageStatsStore((state) => state.catalog);
+  const catalogStatus = useUsageStatsStore((state) => state.catalogStatus);
+  const loadUsageCatalog = useUsageStatsStore((state) => state.loadUsageCatalog);
+  const legacyLoading = useUsageStatsStore((state) => state.loading);
+  const summaryLoading = summaryStatus === 'loading';
   const storeError = useUsageStatsStore((state) => state.error);
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
+  const summaryLastRefreshedAtTs = useUsageStatsStore((state) => state.summaryLastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
+  const loadUsageSummary = useUsageStatsStore((state) => state.loadUsageSummary);
 
   const [modelPrices, setModelPrices] = useState<ModelPriceOverrides>({});
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const loadUsage = useCallback(async () => {
-    await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
-  }, [loadUsageStats]);
+  const loadUsage = useCallback(async (window = '24h', mode: UsageLoadMode = 'manual') => {
+    try {
+      const summaryState = useUsageStatsStore.getState();
+      const summaryOptions = buildUsageSummaryLoadOptions(window, mode, summaryState);
+      await loadUsageSummary(summaryOptions);
+      const state = useUsageStatsStore.getState();
+      const eventsOptions = buildUsageEventsLoadOptions(window, {
+        summaryRange: state.summaryRange,
+        summaryAnchor: state.summaryAnchor,
+      });
+      if ((state.summaryStatus === 'ready' || state.summaryStatus === 'not_modified') && eventsOptions) {
+        await loadUsageEvents(eventsOptions).catch(async () => {
+          const eventsState = useUsageStatsStore.getState();
+          if (eventsState.eventsStatus === 'legacy_degraded') {
+            await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
+          }
+        });
+      }
+      return;
+    } catch (error: unknown) {
+      const state = useUsageStatsStore.getState();
+      const canDegrade =
+        state.summaryStatus === 'legacy_degraded' || isProjectionUnavailableError(error);
+      if (!canDegrade) throw error;
+
+      // A single explicit legacy read is allowed for capability/projection degradation.
+      await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
+    }
+  }, [loadUsageEvents, loadUsageStats, loadUsageSummary]);
 
   useEffect(() => {
-    void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
+    void loadUsageCatalog().catch(() => {});
     setModelPrices(loadModelPrices());
-  }, [loadUsageStats]);
+  }, [connectionScopeKey, loadUsageCatalog, usageScopeKey]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -84,7 +210,10 @@ export function useUsageData(): UseUsageDataReturn {
     importInputRef.current?.click();
   };
 
-  const handleImportChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    window = '24h'
+  ) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -111,7 +240,7 @@ export function useUsageData(): UseUsageDataReturn {
         'success'
       );
       try {
-        await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
+        await loadUsage(window);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '';
         showNotification(
@@ -136,11 +265,42 @@ export function useUsageData(): UseUsageDataReturn {
   }, []);
 
   const usage = usageSnapshot as UsagePayload | null;
+  const legacyDegraded = Boolean(usage && summaryStatus !== 'ready' && summaryStatus !== 'not_modified');
+  const summary = legacyDegraded ? null : summarySnapshot;
+  const summaryDashboard = useMemo(
+    () => (summary ? buildSummaryDashboard(summary, modelPrices) : null),
+    [modelPrices, summary]
+  );
   const error = storeError || '';
-  const lastRefreshedAt = lastRefreshedAtTs ? new Date(lastRefreshedAtTs) : null;
+  const loading = summaryLoading || legacyLoading;
+  const eventsLegacyDegraded = eventsStatus === 'legacy_degraded';
+  const eventsFallbackError = eventsLegacyDegraded ? error || null : null;
+  const renderSummaryAnchor = legacyDegraded ? null : summaryAnchor;
+  const renderSummaryRange = legacyDegraded ? null : summaryRange;
+  const lastRefreshedAt = summaryLastRefreshedAtTs
+    ? new Date(summaryLastRefreshedAtTs)
+    : lastRefreshedAtTs
+      ? new Date(lastRefreshedAtTs)
+      : null;
 
   return {
     usage,
+    summary,
+    summaryDashboard,
+    summaryStatus,
+    summaryAnchor: renderSummaryAnchor,
+    summaryRange: renderSummaryRange,
+    summaryError,
+    legacyDegraded,
+    eventsLegacyDegraded,
+    events,
+    eventsStatus,
+    eventsHasMore,
+    eventsError,
+    eventsFallbackError,
+    loadUsageEvents,
+    catalog,
+    catalogStatus,
     loading,
     error,
     lastRefreshedAt,

@@ -82,7 +82,8 @@ jobs:
         run: |
           cd dist
           mv index.html management.html
-          ls -lh management.html
+          test -f usageExportSink.service-worker.js
+          ls -lh management.html usageExportSink.service-worker.js
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -90,7 +91,9 @@ jobs:
           tag_name: ${{ steps.meta.outputs.release_tag }}
           name: ${{ steps.meta.outputs.release_name }}
           target_commitish: ${{ github.sha }}
-          files: dist/management.html
+          files: |
+            dist/management.html
+            dist/usageExportSink.service-worker.js
           body_path: release-notes.md
           draft: false
           prerelease: false

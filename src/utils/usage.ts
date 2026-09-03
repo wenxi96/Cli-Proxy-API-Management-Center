@@ -46,6 +46,7 @@ export {
   buildPriceKey,
   calculateUsageCost,
   getPriceOptionsFromUsage,
+  getPriceOptionsFromCatalog,
   hasAnyResolvedCost,
   isCostUnresolved,
   loadModelPrices,
@@ -306,106 +307,115 @@ export const normalizeAuthIndex = (value: unknown) => {
   return null;
 };
 
-const USAGE_SOURCE_PREFIX_KEY = 'k:';
-const USAGE_SOURCE_PREFIX_MASKED = 'm:';
-const USAGE_SOURCE_PREFIX_TEXT = 't:';
+const REDACTED_SOURCE_KEY = /^redacted:[0-9a-f]{16}$/;
+const EMAIL_SOURCE_KEY = /^[^\s@]+@[^\s@]+$/;
 
-const KEY_LIKE_TOKEN_REGEX =
-  /(sk-[A-Za-z0-9-_]{6,}|sk-ant-[A-Za-z0-9-_]{6,}|AIza[0-9A-Za-z-_]{8,}|AI[a-zA-Z0-9_-]{6,}|hf_[A-Za-z0-9]{6,}|pk_[A-Za-z0-9]{6,}|rk_[A-Za-z0-9]{6,})/;
-const MASKED_TOKEN_HINT_REGEX = /^[^\s]{1,24}(\*{2,}|\.{3}|…)[^\s]{1,24}$/;
+const SHA256_ROUND_CONSTANTS = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+  0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+  0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+  0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+];
 
-const keyFingerprintCache = new Map<string, string>();
+const rotateRight32 = (value: number, bits: number): number =>
+  (value >>> bits) | (value << (32 - bits));
 
-const fnv1a64Hex = (value: string): string => {
-  const cached = keyFingerprintCache.get(value);
-  if (cached) return cached;
-
-  const FNV_OFFSET_BASIS = 0xcbf29ce484222325n;
-  const FNV_PRIME = 0x100000001b3n;
-
-  let hash = FNV_OFFSET_BASIS;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= BigInt(value.charCodeAt(i));
-    hash = (hash * FNV_PRIME) & 0xffffffffffffffffn;
+const sha256Hex = (value: string): string => {
+  const bytes = new TextEncoder().encode(value);
+  const bitLength = bytes.length * 8;
+  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+  const message = new Uint8Array(paddedLength);
+  message.set(bytes);
+  message[bytes.length] = 0x80;
+  const lengthOffset = paddedLength - 8;
+  for (let index = 0; index < 8; index += 1) {
+    message[lengthOffset + index] = Math.floor(bitLength / 2 ** (56 - index * 8)) & 0xff;
   }
 
-  const hex = hash.toString(16).padStart(16, '0');
-  keyFingerprintCache.set(value, hex);
-  return hex;
-};
+  let h0 = 0x6a09e667;
+  let h1 = 0xbb67ae85;
+  let h2 = 0x3c6ef372;
+  let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f;
+  let h5 = 0x9b05688c;
+  let h6 = 0x1f83d9ab;
+  let h7 = 0x5be0cd19;
 
-const looksLikeRawSecret = (text: string): boolean => {
-  if (!text || /\s/.test(text)) return false;
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    const words = new Uint32Array(64);
+    for (let index = 0; index < 16; index += 1) {
+      const base = offset + index * 4;
+      words[index] =
+        (message[base] << 24) |
+        (message[base + 1] << 16) |
+        (message[base + 2] << 8) |
+        message[base + 3];
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const previous = words[index - 15];
+      const secondPrevious = words[index - 2];
+      const smallSigma0 =
+        rotateRight32(previous, 7) ^ rotateRight32(previous, 18) ^ (previous >>> 3);
+      const smallSigma1 =
+        rotateRight32(secondPrevious, 17) ^ rotateRight32(secondPrevious, 19) ^ (secondPrevious >>> 10);
+      words[index] = (words[index - 16] + smallSigma0 + words[index - 7] + smallSigma1) >>> 0;
+    }
 
-  const lower = text.toLowerCase();
-  if (lower.endsWith('.json')) return false;
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return false;
-  if (/[\\/]/.test(text)) return false;
-
-  if (KEY_LIKE_TOKEN_REGEX.test(text)) return true;
-
-  if (text.length >= 32 && text.length <= 512) {
-    return true;
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    let f = h5;
+    let g = h6;
+    let h = h7;
+    for (let index = 0; index < 64; index += 1) {
+      const bigSigma1 = rotateRight32(e, 6) ^ rotateRight32(e, 11) ^ rotateRight32(e, 25);
+      const choose = (e & f) ^ (~e & g);
+      const temp1 = (h + bigSigma1 + choose + SHA256_ROUND_CONSTANTS[index] + words[index]) >>> 0;
+      const bigSigma0 = rotateRight32(a, 2) ^ rotateRight32(a, 13) ^ rotateRight32(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (bigSigma0 + majority) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0;
+    h5 = (h5 + f) >>> 0;
+    h6 = (h6 + g) >>> 0;
+    h7 = (h7 + h) >>> 0;
   }
 
-  if (text.length >= 16 && text.length < 32 && /^[A-Za-z0-9._=-]+$/.test(text)) {
-    return /[A-Za-z]/.test(text) && /\d/.test(text);
-  }
-
-  return false;
-};
-
-const extractRawSecretFromText = (text: string): string | null => {
-  if (!text) return null;
-  if (looksLikeRawSecret(text)) return text;
-
-  const keyLikeMatch = text.match(KEY_LIKE_TOKEN_REGEX);
-  if (keyLikeMatch?.[0]) return keyLikeMatch[0];
-
-  const queryMatch = text.match(
-    /(?:[?&])(api[-_]?key|key|token|access_token|authorization)=([^&#\s]+)/i
-  );
-  const queryValue = queryMatch?.[2];
-  if (queryValue && looksLikeRawSecret(queryValue)) {
-    return queryValue;
-  }
-
-  const headerMatch = text.match(
-    /(api[-_]?key|key|token|access[-_]?token|authorization)\s*[:=]\s*([A-Za-z0-9._=-]+)/i
-  );
-  const headerValue = headerMatch?.[2];
-  if (headerValue && looksLikeRawSecret(headerValue)) {
-    return headerValue;
-  }
-
-  const bearerMatch = text.match(/\bBearer\s+([A-Za-z0-9._=-]{6,})/i);
-  const bearerValue = bearerMatch?.[1];
-  if (bearerValue && looksLikeRawSecret(bearerValue)) {
-    return bearerValue;
-  }
-
-  return null;
+  return [h0, h1, h2, h3, h4, h5, h6, h7]
+    .map((word) => word.toString(16).padStart(8, '0'))
+    .join('');
 };
 
 export function normalizeUsageSourceId(
-  value: unknown,
-  masker: (val: string) => string = maskApiKey
+  value: unknown
 ): string {
   const raw =
     typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
   const trimmed = raw.trim();
   if (!trimmed) return '';
-
-  const extracted = extractRawSecretFromText(trimmed);
-  if (extracted) {
-    return `${USAGE_SOURCE_PREFIX_KEY}${fnv1a64Hex(extracted)}`;
-  }
-
-  if (MASKED_TOKEN_HINT_REGEX.test(trimmed)) {
-    return `${USAGE_SOURCE_PREFIX_MASKED}${masker(trimmed)}`;
-  }
-
-  return `${USAGE_SOURCE_PREFIX_TEXT}${trimmed}`;
+  if (REDACTED_SOURCE_KEY.test(trimmed) || EMAIL_SOURCE_KEY.test(trimmed)) return trimmed;
+  return `redacted:${sha256Hex(trimmed).slice(0, 16)}`;
 }
 
 export function buildCandidateUsageSourceIds(input: {
@@ -416,17 +426,12 @@ export function buildCandidateUsageSourceIds(input: {
 
   const prefix = input.prefix?.trim();
   if (prefix) {
-    result.push(`${USAGE_SOURCE_PREFIX_TEXT}${prefix}`);
+    result.push(normalizeUsageSourceId(prefix));
   }
 
   const apiKey = input.apiKey?.trim();
   if (apiKey) {
-    // Include the normalised form first so that "non-standard" keys (e.g. short tokens,
-    // keys containing '/' etc.) that are classified as text by normalizeUsageSourceId()
-    // can still match usage details.
     result.push(normalizeUsageSourceId(apiKey));
-    result.push(`${USAGE_SOURCE_PREFIX_KEY}${fnv1a64Hex(apiKey)}`);
-    result.push(`${USAGE_SOURCE_PREFIX_MASKED}${maskApiKey(apiKey)}`);
   }
 
   return Array.from(new Set(result));
@@ -1267,6 +1272,9 @@ export interface ChartData {
   knownUsageCount?: number;
   unknownUsageCount?: number;
   hasData?: boolean;
+  availability?: 'available' | 'unavailable';
+  seriesError?: Record<string, unknown> | null;
+  numericDataComplete?: boolean;
 }
 
 const CHART_COLORS = [
@@ -1626,7 +1634,7 @@ export function calculateServiceHealthData(usageDetails: UsageDetail[]): Service
 
 export function computeKeyStats(
   usageData: unknown,
-  masker: (val: string) => string = maskApiKey
+  _masker: (val: string) => string = maskApiKey
 ): KeyStats {
   const apis = getApisRecord(usageData);
   if (!apis) {
@@ -1655,7 +1663,7 @@ export function computeKeyStats(
 
       details.forEach((detail) => {
         const detailRecord = isRecord(detail) ? detail : null;
-        const source = normalizeUsageSourceId(detailRecord?.source, masker);
+        const source = normalizeUsageSourceId(detailRecord?.source);
         const authIndexKey = normalizeAuthIndex(detailRecord?.auth_index);
         const isFailed = detailRecord?.failed === true;
 

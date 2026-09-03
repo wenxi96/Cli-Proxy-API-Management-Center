@@ -8,6 +8,7 @@ const getCostStatusLabelKey = (status: ApiStats['costStatus']) => {
   if (status === 'complete') return 'usage_stats.cost_status_complete';
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  if (status === 'policy_unavailable') return 'usage_stats.cost_status_policy_unavailable';
   return 'usage_stats.cost_status_unconfigured';
 };
 
@@ -15,6 +16,7 @@ const getCostStatusClassName = (status: ApiStats['costStatus']) => {
   if (status === 'complete') return styles.costStatusComplete;
   if (status === 'partial') return styles.costStatusPartial;
   if (status === 'unknown_usage') return styles.costStatusUnknown;
+  if (status === 'policy_unavailable') return styles.costStatusUnknown;
   return styles.costStatusUnconfigured;
 };
 
@@ -30,12 +32,18 @@ export interface ApiDetailsCardProps {
   apiStats: ApiStats[];
   loading: boolean;
   hasPrices: boolean;
+  numericDataComplete?: boolean;
 }
 
 type ApiSortKey = 'endpoint' | 'requests' | 'tokens' | 'cost';
 type SortDir = 'asc' | 'desc';
 
-export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardProps) {
+export function ApiDetailsCard({
+  apiStats,
+  loading,
+  hasPrices,
+  numericDataComplete = true,
+}: ApiDetailsCardProps) {
   const { t } = useTranslation();
   const [expandedApis, setExpandedApis] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<ApiSortKey>('requests');
@@ -130,11 +138,11 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                           <span className={styles.apiBadge}>
                             <span className={styles.requestCountCell}>
                               <span>
-                                {t('usage_stats.requests_count')}: {api.totalRequests.toLocaleString()}
+                                {t('usage_stats.requests_count')}: {numericDataComplete ? api.totalRequests.toLocaleString() : '--'}
                               </span>
                               <span className={styles.requestBreakdown}>
-                                (<span className={styles.statSuccess}>{api.successCount.toLocaleString()}</span>{' '}
-                                <span className={styles.statFailure}>{api.failureCount.toLocaleString()}</span>)
+                                (<span className={styles.statSuccess}>{numericDataComplete ? api.successCount.toLocaleString() : '--'}</span>{' '}
+                                <span className={styles.statFailure}>{numericDataComplete ? api.failureCount.toLocaleString() : '--'}</span>)
                               </span>
                             </span>
                           </span>
@@ -142,7 +150,7 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                             {t('usage_stats.tokens_count')}:{' '}
                             {api.tokenCoverageStatus === 'unknown'
                               ? '--'
-                              : formatCompactNumber(api.totalTokens)}
+                              : numericDataComplete ? formatCompactNumber(api.totalTokens) : '--'}
                             {api.tokenCoverageStatus !== 'complete' && (
                               <span className={getTokenCoverageClassName(api.tokenCoverageStatus)}>
                                 {t(getTokenCoverageLabelKey(api.tokenCoverageStatus))}
@@ -152,7 +160,7 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                           {hasPrices && (
                             <span className={styles.apiBadge}>
                               {t('usage_stats.total_cost')}:{' '}
-                              {api.totalCost === null ? '--' : formatUsd(api.totalCost)}
+                              {!numericDataComplete || api.totalCost === null ? '--' : formatUsd(api.totalCost)}
                               {api.costStatus !== 'complete' && (
                                 <span
                                   className={getCostStatusClassName(api.costStatus)}
@@ -181,17 +189,17 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                             <span className={styles.modelName}>{model}</span>
                             <span className={styles.modelStat}>
                               <span className={styles.requestCountCell}>
-                                <span>{stats.requests.toLocaleString()}</span>
+                                <span>{numericDataComplete ? stats.requests.toLocaleString() : '--'}</span>
                                 <span className={styles.requestBreakdown}>
-                                  (<span className={styles.statSuccess}>{stats.successCount.toLocaleString()}</span>{' '}
-                                  <span className={styles.statFailure}>{stats.failureCount.toLocaleString()}</span>)
+                                  (<span className={styles.statSuccess}>{numericDataComplete ? stats.successCount.toLocaleString() : '--'}</span>{' '}
+                                  <span className={styles.statFailure}>{numericDataComplete ? stats.failureCount.toLocaleString() : '--'}</span>)
                                 </span>
                               </span>
                             </span>
                             <span className={styles.modelStat}>
                               {stats.tokenCoverageStatus === 'unknown'
                                 ? '--'
-                                : formatCompactNumber(stats.tokens)}
+                                : numericDataComplete ? formatCompactNumber(stats.tokens) : '--'}
                               {stats.tokenCoverageStatus !== 'complete' && (
                                 <span
                                   className={getTokenCoverageClassName(

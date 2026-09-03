@@ -8,6 +8,7 @@ import {
   type StatusBlockDetail,
 } from '@/utils/usage';
 import type { UsagePayload } from './hooks/useUsageData';
+import type { SummaryHealthData } from '@/utils/usage/summaryAdapter';
 import styles from '@/pages/UsagePage.module.scss';
 
 const COLOR_STOPS = [
@@ -56,20 +57,23 @@ function formatDateTime(timestamp: number): string {
 
 export interface ServiceHealthCardProps {
   usage: UsagePayload | null;
+  summaryHealth?: SummaryHealthData | null;
   loading: boolean;
 }
 
-export function ServiceHealthCard({ usage, loading }: ServiceHealthCardProps) {
+export function ServiceHealthCard({ usage, summaryHealth, loading }: ServiceHealthCardProps) {
   const { t } = useTranslation();
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltipState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const healthData: ServiceHealthData = useMemo(() => {
+    if (summaryHealth) return summaryHealth;
     const details = usage ? collectUsageDetails(usage) : [];
     return calculateServiceHealthData(details);
-  }, [usage]);
+  }, [summaryHealth, usage]);
 
   const hasData = healthData.totalSuccess + healthData.totalFailure > 0;
+  const summaryIncomplete = Boolean(summaryHealth && !summaryHealth.healthDataComplete);
 
   useEffect(() => {
     if (activeTooltip === null) return;
@@ -229,7 +233,7 @@ export function ServiceHealthCard({ usage, loading }: ServiceHealthCardProps) {
         <div className={styles.healthMeta}>
           <span className={styles.healthWindow}>{t('service_health.window')}</span>
           <span className={`${styles.healthRate} ${rateClass}`}>
-            {loading ? '--' : hasData ? `${healthData.successRate.toFixed(1)}%` : '--'}
+            {loading || summaryIncomplete ? '--' : hasData ? `${healthData.successRate.toFixed(1)}%` : '--'}
           </span>
         </div>
       </div>
@@ -258,6 +262,9 @@ export function ServiceHealthCard({ usage, loading }: ServiceHealthCardProps) {
           })}
         </div>
       </div>
+      {summaryIncomplete && (
+        <div className={styles.hint}>{t('usage_stats.health_incomplete')}</div>
+      )}
       <div className={styles.healthLegend}>
         <span className={styles.healthLegendLabel}>{t('service_health.oldest')}</span>
         <div className={styles.healthLegendColors}>

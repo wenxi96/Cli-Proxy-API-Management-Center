@@ -8,6 +8,7 @@ export interface SourceInfoMapInput {
   codexApiKeys?: ProviderKeyConfig[];
   vertexApiKeys?: ProviderKeyConfig[];
   openaiCompatibility?: OpenAIProviderConfig[];
+  catalog?: unknown;
 }
 
 type SourceInfoEntry = Required<Pick<SourceInfo, 'displayName' | 'type' | 'identityKey'>>;
@@ -15,6 +16,7 @@ type SourceInfoEntry = Required<Pick<SourceInfo, 'displayName' | 'type' | 'ident
 export interface SourceInfoMap {
   byAuthIndex: Map<string, SourceInfoEntry | null>;
   bySource: Map<string, SourceInfoEntry | null>;
+  bySourceId?: Map<string, SourceInfoEntry | null>;
 }
 
 const buildProviderIdentityKey = (type: string, index: number) => `${type}:${index}`;
@@ -51,6 +53,7 @@ const formatRawSourceDisplayName = (source: string) => {
 export function buildSourceInfoMap(input: SourceInfoMapInput): SourceInfoMap {
   const byAuthIndex = new Map<string, SourceInfoEntry | null>();
   const bySource = new Map<string, SourceInfoEntry | null>();
+  const bySourceId = new Map<string, SourceInfoEntry | null>();
 
   const registerProvider = (
     entry: SourceInfoEntry,
@@ -114,16 +117,47 @@ export function buildSourceInfoMap(input: SourceInfoMapInput): SourceInfoMap {
     );
   });
 
-  return { byAuthIndex, bySource };
+  // Catalog labels are immutable all-history facts and take precedence over
+  // labels derived only from the current page. They remain keyed by source_id.
+  const catalog = input.catalog && typeof input.catalog === 'object' ? input.catalog as Record<string, unknown> : {};
+  const catalogSources = Array.isArray(catalog.sources) ? catalog.sources : [];
+  catalogSources.forEach((raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const entry = raw as Record<string, unknown>;
+    const sourceId = typeof entry.source_id === 'string' ? entry.source_id.trim() : '';
+    if (!sourceId) return;
+    const sourceKey = typeof entry.source_key === 'string' ? entry.source_key.trim() : '';
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    const provider = typeof entry.provider === 'string' ? entry.provider.trim() : '';
+    const configEntry = sourceKey ? bySource.get(sourceKey) : undefined;
+    const isCatalogFallbackLabel = !label || label === sourceKey || label === sourceId;
+    const sourceEntry: SourceInfoEntry = {
+      displayName: isCatalogFallbackLabel
+        ? configEntry?.displayName || sourceKey || sourceId
+        : label,
+      type: provider || configEntry?.type || '',
+      identityKey: `source:${sourceId}`,
+    };
+    registerIdentity(bySourceId, sourceId, sourceEntry);
+    if (sourceKey) registerIdentity(bySource, sourceKey, sourceEntry);
+  });
+
+  return { byAuthIndex, bySource, bySourceId };
 }
 
 export function resolveSourceDisplay(
   sourceRaw: string,
   authIndex: unknown,
   sourceInfoMap: SourceInfoMap,
-  authFileMap: Map<string, CredentialInfo>
+  authFileMap: Map<string, CredentialInfo>,
+  sourceId?: unknown
 ): SourceInfo {
   const source = sourceRaw.trim();
+  const sourceIdKey = typeof sourceId === 'string' ? sourceId.trim() : '';
+  if (sourceIdKey) {
+    const matchedBySourceId = sourceInfoMap.bySourceId?.get(sourceIdKey);
+    if (matchedBySourceId) return matchedBySourceId;
+  }
   const authIndexKey = normalizeAuthIndex(authIndex);
 
   if (authIndexKey) {

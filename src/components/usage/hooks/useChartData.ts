@@ -3,9 +3,11 @@ import type { ChartOptions } from 'chart.js';
 import { buildChartData, type ChartData } from '@/utils/usage';
 import { buildChartOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './useUsageData';
+import { buildSummaryChartData } from '@/utils/usage/summaryAdapter';
 
 export interface UseChartDataOptions {
   usage: UsagePayload | null;
+  summary?: Record<string, unknown> | null;
   chartLines: string[];
   isDark: boolean;
   isMobile: boolean;
@@ -25,6 +27,7 @@ export interface UseChartDataReturn {
 
 export function useChartData({
   usage,
+  summary,
   chartLines,
   isDark,
   isMobile,
@@ -34,14 +37,16 @@ export function useChartData({
   const [tokensPeriod, setTokensPeriod] = useState<'hour' | 'day'>('day');
 
   const requestsChartData = useMemo(() => {
+    if (summary) return buildSummaryChartData(summary, 'requests');
     if (!usage) return { labels: [], datasets: [] };
     return buildChartData(usage, requestsPeriod, 'requests', chartLines, { hourWindowHours });
-  }, [usage, requestsPeriod, chartLines, hourWindowHours]);
+  }, [summary, usage, requestsPeriod, chartLines, hourWindowHours]);
 
   const tokensChartData = useMemo(() => {
+    if (summary) return buildSummaryChartData(summary, 'tokens');
     if (!usage) return { labels: [], datasets: [] };
     return buildChartData(usage, tokensPeriod, 'tokens', chartLines, { hourWindowHours });
-  }, [usage, tokensPeriod, chartLines, hourWindowHours]);
+  }, [summary, usage, tokensPeriod, chartLines, hourWindowHours]);
 
   const requestsChartOptions = useMemo(
     () =>

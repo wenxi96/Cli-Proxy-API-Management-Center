@@ -254,6 +254,53 @@ class ApiClient {
   async requestRaw(config: AxiosRequestConfig): Promise<AxiosResponse> {
     return this.instance.request(config);
   }
+
+  /** Fetch an authenticated streaming response without buffering its body. */
+  async fetchStream(
+    url: string,
+    options: { params?: Record<string, unknown>; signal?: AbortSignal; headers?: Record<string, string> } = {}
+  ): Promise<Response> {
+    const query = new URLSearchParams();
+    Object.entries(options.params ?? {}).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((entry) => query.append(key, String(entry)));
+      } else if (value !== undefined && value !== null) {
+        query.append(key, String(value));
+      }
+    });
+    const target = `${this.apiBase}${url}${query.toString() ? `?${query.toString()}` : ''}`;
+    const response = await fetch(target, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(this.managementKey ? { Authorization: `Bearer ${this.managementKey}` } : {}),
+        ...(options.headers ?? {}),
+      },
+      signal: options.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      let payload: unknown = null;
+      try {
+        payload = await response.clone().json();
+      } catch {
+        // Preserve the HTTP status even when a proxy returns non-JSON errors.
+      }
+      const apiError = new Error(
+        payload && typeof payload === 'object' && 'error' in payload
+          ? String((payload as Record<string, unknown>).error)
+          : `HTTP ${response.status}`
+      ) as ApiError;
+      apiError.status = response.status;
+      apiError.apiCode =
+        payload && typeof payload === 'object' && 'code' in payload
+          ? String((payload as Record<string, unknown>).code)
+          : undefined;
+      apiError.data = payload;
+      throw apiError;
+    }
+    return response;
+  }
 }
 
 // 导出单例

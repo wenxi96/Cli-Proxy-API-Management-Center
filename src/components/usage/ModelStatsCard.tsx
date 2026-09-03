@@ -14,6 +14,7 @@ const getCostStatusLabelKey = (status: ModelStatsSummary['costStatus']) => {
   if (status === 'complete') return 'usage_stats.cost_status_complete';
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
+  if (status === 'policy_unavailable') return 'usage_stats.cost_status_policy_unavailable';
   return 'usage_stats.cost_status_unconfigured';
 };
 
@@ -38,6 +39,7 @@ export interface ModelStatsCardProps {
   modelStats: ModelStat[];
   loading: boolean;
   hasPrices: boolean;
+  numericDataComplete?: boolean;
 }
 
 type SortKey =
@@ -53,7 +55,12 @@ interface ModelStatWithRate extends ModelStat {
   successRate: number;
 }
 
-export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCardProps) {
+export function ModelStatsCard({
+  modelStats,
+  loading,
+  hasPrices,
+  numericDataComplete = true,
+}: ModelStatsCardProps) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('requests');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -180,14 +187,14 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                       <td className={styles.modelCell}>{stat.model}</td>
                       <td>
                         <span className={styles.requestCountCell}>
-                          <span>{stat.requests.toLocaleString()}</span>
+                          <span>{numericDataComplete ? stat.requests.toLocaleString() : '--'}</span>
                           <span className={styles.requestBreakdown}>
                             (
                             <span className={styles.statSuccess}>
-                              {stat.successCount.toLocaleString()}
+                              {numericDataComplete ? stat.successCount.toLocaleString() : '--'}
                             </span>{' '}
                             <span className={styles.statFailure}>
-                              {stat.failureCount.toLocaleString()}
+                              {numericDataComplete ? stat.failureCount.toLocaleString() : '--'}
                             </span>
                             )
                           </span>
@@ -197,7 +204,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         <span>
                           {stat.tokenCoverageStatus === 'unknown'
                             ? '--'
-                            : formatCompactNumber(stat.tokens)}
+                            : numericDataComplete ? formatCompactNumber(stat.tokens) : '--'}
                         </span>
                         {stat.tokenCoverageStatus !== 'complete' && (
                           <span
@@ -208,7 +215,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         )}
                       </td>
                       <td className={styles.durationCell}>
-                        {formatDurationMs(stat.averageLatencyMs)}
+                        {numericDataComplete ? formatDurationMs(stat.averageLatencyMs) : '--'}
                       </td>
                       <td>
                         <span
@@ -220,12 +227,12 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                                 : styles.statFailure
                           }
                         >
-                          {stat.successRate.toFixed(1)}%
+                          {numericDataComplete ? String(stat.successRate.toFixed(1)) + '%' : '--'}
                         </span>
                       </td>
                       {hasPrices && (
                         <td>
-                          <span>{stat.cost === null ? '--' : formatUsd(stat.cost)}</span>
+                          <span>{!numericDataComplete || stat.cost === null ? '--' : formatUsd(stat.cost)}</span>
                           {stat.costStatus !== 'complete' && (
                             <span
                               className={getCostStatusClassName(stat.costStatus)}

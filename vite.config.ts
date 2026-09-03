@@ -1,9 +1,24 @@
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 import { execSync } from 'child_process';
 import fs from 'fs';
+
+function usageExportServiceWorkerChunk(): Plugin {
+  return {
+    name: 'usage-export-service-worker-chunk',
+    apply: 'build',
+    buildStart() {
+      this.emitFile({
+        type: 'chunk',
+        id: path.resolve(__dirname, 'src/workers/usageExportSink.service-worker.ts'),
+        fileName: 'usageExportSink.service-worker.js',
+      });
+    },
+  };
+}
 
 function normalizeVersion(raw: string): string {
   return raw.trim().replace(/^v/i, '').replace(/-build\.[0-9a-f]+$/i, '');
@@ -55,8 +70,10 @@ function getVersion(): string {
 export default defineConfig({
   plugins: [
     react(),
+    usageExportServiceWorkerChunk(),
     viteSingleFile({
-      removeViteModuleLoader: true
+      removeViteModuleLoader: true,
+      inlinePattern: ['**/index-*.js', '**/style-*.css', '**/defineProperty-*.js'],
     })
   ],
   define: {

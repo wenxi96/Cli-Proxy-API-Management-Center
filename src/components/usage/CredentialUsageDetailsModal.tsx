@@ -19,7 +19,7 @@ interface CredentialUsageDetailsModalProps {
   open: boolean;
   credential: CredentialUsageRow | null;
   context: CredentialUsageBuildContext;
-  requestWindow?: Pick<AuthUsageRequestsParams, 'from' | 'to'>;
+  requestWindow?: Pick<AuthUsageRequestsParams, 'from' | 'to' | 'to_exclusive'>;
   onClose: () => void;
 }
 
@@ -30,6 +30,7 @@ const getCostStatusLabelKey = (status: CredentialUsageRow['cost']['costStatus'])
   if (status === 'unknown_usage') return 'usage_stats.cost_status_unknown_usage';
   if (status === 'partial') return 'usage_stats.cost_status_partial';
   if (status === 'unconfigured') return 'usage_stats.cost_status_unconfigured';
+  if (status === 'policy_unavailable') return 'usage_stats.cost_status_policy_unavailable';
   return 'usage_stats.cost_status_complete';
 };
 
@@ -37,6 +38,7 @@ const getCostStatusClassName = (status: CredentialUsageRow['cost']['costStatus']
   if (status === 'complete') return styles.costStatusComplete;
   if (status === 'partial') return styles.costStatusPartial;
   if (status === 'unknown_usage') return styles.costStatusUnknown;
+  if (status === 'policy_unavailable') return styles.costStatusUnknown;
   return styles.costStatusUnconfigured;
 };
 

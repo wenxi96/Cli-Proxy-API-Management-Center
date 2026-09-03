@@ -299,6 +299,12 @@ export function calculateUsageCost(
   userOverrides: ModelPriceOverrides
 ): NormalizedUsageCost {
   const tokens = detail.tokens;
+  if (
+    detail.billablePolicyVersion !== undefined &&
+    detail.billablePolicyVersion.trim().toLowerCase() !== 'v1'
+  ) {
+    return buildEmptyCost('policy_unavailable');
+  }
   if (!tokens.hasKnownUsage) {
     return buildEmptyCost('unknown_usage');
   }
@@ -434,6 +440,9 @@ export function calculateUsageCost(
 }
 
 const mergeStatus = (summaries: NormalizedUsageCost[]): CostStatus => {
+  if (summaries.some((summary) => summary.costStatus === 'policy_unavailable')) {
+    return 'policy_unavailable';
+  }
   const hasKnownCost = summaries.some((summary) => summary.totalCostUsd !== null);
   const hasIncomplete = summaries.some((summary) => summary.costStatus !== 'complete');
   if (hasKnownCost && hasIncomplete) return 'partial';
@@ -507,6 +516,60 @@ export function getPriceOptionsFromUsage(
         price: resolved.price,
         hasOfficialDefault: resolved.hasOfficialDefault,
         hasUserOverride,
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export interface UsageCatalogPriceEntry {
+  id?: string;
+  label?: string;
+  price_key?: string;
+  provider?: string;
+}
+
+/** Build the all-history price selector from the immutable catalog. */
+export function getPriceOptionsFromCatalog(
+  catalog: unknown,
+  userOverrides: ModelPriceOverrides
+): PriceOption[] {
+  const record = isRecord(catalog) ? catalog : {};
+  const entries = [
+    ...(Array.isArray(record.models) ? record.models : []),
+    ...(Array.isArray(record.price_keys) ? record.price_keys : []),
+  ].filter(isRecord) as UsageCatalogPriceEntry[];
+  const keys = new Set<PriceKey>();
+  const labels = new Map<PriceKey, string>();
+
+  entries.forEach((entry) => {
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    const provider = typeof entry.provider === 'string' ? entry.provider.trim() : '';
+    const rawPriceKey = typeof entry.price_key === 'string' ? entry.price_key.trim() : '';
+    const key = (rawPriceKey || buildPriceKey(provider, id)) as PriceKey;
+    if (!key || key.endsWith(':-')) return;
+    keys.add(key);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (label && !labels.has(key)) labels.set(key, label);
+  });
+
+  Object.keys(officialDefaults).forEach((key) => keys.add(key as PriceKey));
+  Object.keys(userOverrides).forEach((key) => keys.add(key as PriceKey));
+
+  return Array.from(keys)
+    .map((key) => {
+      const [providerPart, ...modelParts] = key.split(':');
+      const provider = providerPart === 'legacy' ? '' : providerPart;
+      const model = modelParts.join(':');
+      const resolved = resolveModelPrice(provider, model, userOverrides);
+      return {
+        key,
+        model,
+        provider: providerPart,
+        label: labels.get(key) || (providerPart === 'legacy' ? model : `${providerPart}:${model}`),
+        source: resolved.source,
+        price: resolved.price,
+        hasOfficialDefault: resolved.hasOfficialDefault,
+        hasUserOverride: Boolean(userOverrides[key]),
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label));

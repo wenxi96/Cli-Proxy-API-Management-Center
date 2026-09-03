@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Chart as ChartJS,
@@ -36,12 +36,15 @@ import {
   useSparklines,
   useChartData,
 } from '@/components/usage';
+import { buildSummaryHealthData } from '@/utils/usage/summaryAdapter';
+import { buildCredentialRequestWindow } from '@/utils/usage/serverRange';
 import {
   collectUsageDetails,
   getModelNamesFromUsage,
   getApiStats,
   getModelStats,
   getPriceOptionsFromUsage,
+  getPriceOptionsFromCatalog,
   filterUsageByTimeRange,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -65,6 +68,8 @@ const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
 const DEFAULT_CHART_LINES = ['all'];
 const DEFAULT_TIME_RANGE: UsageTimeRange = '24h';
 const MAX_CHART_LINES = 9;
+const AUTO_USAGE_REFRESH_INTERVAL_MS = 60_000;
+const USAGE_RECOVERY_REFRESH_THROTTLE_MS = 30_000;
 const TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; labelKey: string }> = [
   { value: 'all', labelKey: 'usage_stats.range_all' },
   { value: '7h', labelKey: 'usage_stats.range_7h' },
@@ -136,6 +141,21 @@ export function UsagePage() {
   // Data hook
   const {
     usage,
+    summary,
+    summaryDashboard,
+    summaryStatus,
+    summaryAnchor,
+    summaryRange,
+    summaryError,
+    legacyDegraded,
+    eventsLegacyDegraded,
+    events,
+    eventsStatus,
+    eventsHasMore,
+    eventsError,
+    eventsFallbackError,
+    loadUsageEvents,
+    catalog,
     loading,
     error,
     lastRefreshedAt,
@@ -150,11 +170,51 @@ export function UsagePage() {
     importing,
   } = useUsageData();
 
-  useHeaderRefresh(loadUsage);
-
   // Chart lines state
   const [chartLines, setChartLines] = useState<string[]>(loadChartLines);
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
+  const lastAutomaticCheckAtRef = useRef<number | null>(null);
+  const refreshUsage = useCallback(() => loadUsage(timeRange, 'manual'), [loadUsage, timeRange]);
+
+  const runAutomaticRefresh = useCallback(
+    (minimumIntervalMs: number) => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      const lastCheckAt = lastAutomaticCheckAtRef.current;
+      if (lastCheckAt !== null && now - lastCheckAt < minimumIntervalMs) return;
+      lastAutomaticCheckAtRef.current = now;
+      void loadUsage(timeRange, 'automatic').catch(() => {});
+    },
+    [loadUsage, timeRange]
+  );
+
+  useHeaderRefresh(refreshUsage);
+
+  useEffect(() => {
+    void loadUsage(timeRange).catch(() => {});
+  }, [loadUsage, timeRange]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    // The range effect above performs the initial check; automatic checks start after it.
+    lastAutomaticCheckAtRef.current = Date.now();
+    const intervalId = window.setInterval(
+      () => runAutomaticRefresh(AUTO_USAGE_REFRESH_INTERVAL_MS),
+      AUTO_USAGE_REFRESH_INTERVAL_MS
+    );
+    const handleRecovery = () => {
+      if (document.visibilityState === 'visible') {
+        runAutomaticRefresh(USAGE_RECOVERY_REFRESH_THROTTLE_MS);
+      }
+    };
+    window.addEventListener('focus', handleRecovery);
+    document.addEventListener('visibilitychange', handleRecovery);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleRecovery);
+      document.removeEventListener('visibilitychange', handleRecovery);
+    };
+  }, [runAutomaticRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,21 +252,16 @@ export function UsagePage() {
   );
 
   const filteredUsage = useMemo(
-    () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
-    [usage, timeRange]
+    () => (legacyDegraded && usage ? filterUsageByTimeRange(usage, timeRange) : null),
+    [legacyDegraded, usage, timeRange]
+  );
+  const eventsFallbackUsage = useMemo(
+    () => (eventsLegacyDegraded && usage ? filterUsageByTimeRange(usage, timeRange) : null),
+    [eventsLegacyDegraded, timeRange, usage]
   );
   const credentialRequestWindow = useMemo(() => {
-    if (timeRange === 'all' || !lastRefreshedAt) {
-      return undefined;
-    }
-
-    const toMs = lastRefreshedAt.getTime();
-    const fromMs = toMs - HOUR_WINDOW_BY_TIME_RANGE[timeRange] * 60 * 60 * 1000;
-    return {
-      from: new Date(fromMs).toISOString(),
-      to: new Date(toMs).toISOString(),
-    };
-  }, [lastRefreshedAt, timeRange]);
+    return buildCredentialRequestWindow(summaryRange);
+  }, [summaryRange]);
   const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
@@ -236,7 +291,7 @@ export function UsagePage() {
   }, [timeRange]);
 
   const nowMs = lastRefreshedAt?.getTime() ?? 0;
-  const allUsageDetails = useMemo(() => (usage ? collectUsageDetails(usage) : []), [usage]);
+  const allUsageDetails = useMemo(() => (legacyDegraded && usage ? collectUsageDetails(usage) : []), [legacyDegraded, usage]);
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
@@ -252,22 +307,29 @@ export function UsagePage() {
     tokensChartData,
     requestsChartOptions,
     tokensChartOptions,
-  } = useChartData({ usage: filteredUsage, chartLines, isDark, isMobile, hourWindowHours });
+  } = useChartData({
+    usage: filteredUsage,
+    summary,
+    chartLines,
+    isDark,
+    isMobile,
+    hourWindowHours,
+  });
 
   // Derived data
-  const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
-  const apiStats = useMemo(
-    () => getApiStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
+  const modelNames = useMemo(
+    () => summaryDashboard?.modelStats.map((item) => item.model) ?? getModelNamesFromUsage(usage),
+    [summaryDashboard, usage]
   );
-  const modelStats = useMemo(
-    () => getModelStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
-  );
-  const hasPrices = Boolean(filteredUsage);
+  const apiStats = summaryDashboard?.apiStats ?? getApiStats(filteredUsage, modelPrices);
+  const modelStats = summaryDashboard?.modelStats ?? getModelStats(filteredUsage, modelPrices);
+  const hasPrices = Boolean(summaryDashboard || filteredUsage);
   const priceOptions = useMemo(
-    () => getPriceOptionsFromUsage(allUsageDetails, modelPrices),
-    [allUsageDetails, modelPrices]
+    () =>
+      catalog
+        ? getPriceOptionsFromCatalog(catalog, modelPrices)
+        : getPriceOptionsFromUsage(allUsageDetails, modelPrices),
+    [allUsageDetails, catalog, modelPrices]
   );
 
   return (
@@ -316,7 +378,7 @@ export function UsagePage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => void loadUsage().catch(() => {})}
+            onClick={() => void refreshUsage().catch(() => {})}
             disabled={loading || exporting || importing}
           >
             {loading ? t('common.loading') : t('usage_stats.refresh')}
@@ -326,7 +388,7 @@ export function UsagePage() {
             type="file"
             accept=".json,application/json"
             style={{ display: 'none' }}
-            onChange={handleImportChange}
+            onChange={(event) => void handleImportChange(event, timeRange)}
           />
           {lastRefreshedAt && (
             <span className={styles.lastRefreshed}>
@@ -336,11 +398,15 @@ export function UsagePage() {
         </div>
       </div>
 
-      {error && <div className={styles.errorBox}>{error}</div>}
+      {(error || summaryError) && <div className={styles.errorBox}>{error || summaryError}</div>}
+      {summaryStatus === 'unavailable' && (
+        <div className={styles.errorBox}>{t('usage_stats.loading_error')}</div>
+      )}
 
       {/* Stats Overview Cards */}
       <StatCards
         usage={filteredUsage}
+        dashboard={summaryDashboard}
         loading={loading}
         modelPrices={modelPrices}
         nowMs={nowMs}
@@ -362,7 +428,11 @@ export function UsagePage() {
       />
 
       {/* Service Health */}
-      <ServiceHealthCard usage={usage} loading={loading} />
+      <ServiceHealthCard
+        usage={filteredUsage}
+        summaryHealth={summary ? buildSummaryHealthData(summary) : null}
+        loading={loading}
+      />
 
       {/* Charts Grid */}
       <div className={styles.chartsGrid}>
@@ -409,12 +479,32 @@ export function UsagePage() {
 
       {/* Details Grid */}
       <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
+        <ApiDetailsCard
+          apiStats={apiStats}
+          loading={loading}
+          hasPrices={hasPrices}
+          numericDataComplete={summaryDashboard?.numericDataComplete ?? true}
+        />
+        <ModelStatsCard
+          modelStats={modelStats}
+          loading={loading}
+          hasPrices={hasPrices}
+          numericDataComplete={summaryDashboard?.numericDataComplete ?? true}
+        />
       </div>
 
       <RequestEventsDetailsCard
-        usage={filteredUsage}
+        usage={legacyDegraded ? filteredUsage : eventsFallbackUsage}
+        summaryMode={Boolean(summaryDashboard) && !eventsLegacyDegraded}
+        usageWindow={timeRange}
+        usageAnchor={summaryAnchor}
+        summaryRange={summaryRange}
+        events={events}
+        eventsStatus={eventsStatus}
+        eventsHasMore={eventsHasMore}
+        eventsError={eventsError}
+        legacyFallbackError={eventsFallbackError}
+        loadUsageEvents={loadUsageEvents}
         loading={loading}
         geminiKeys={config?.geminiApiKeys || []}
         claudeConfigs={config?.claudeApiKeys || []}
@@ -422,6 +512,8 @@ export function UsagePage() {
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={openaiProvidersForUsage}
         modelPrices={modelPrices}
+        catalog={catalog}
+        facets={summary && typeof summary === 'object' ? (summary as Record<string, unknown>).facets : undefined}
       />
 
       {/* Credential Stats */}
