@@ -33,6 +33,12 @@ import {
   resolveLmuAIBaseUrl,
 } from './lmuAI';
 import {
+  INFISTAR_DISPLAY_NAME,
+  INFISTAR_PROTOCOL_LABELS,
+  getInfistarProtocolUrls,
+  resolveInfistarBaseUrl,
+} from './infistar';
+import {
   KIMI_DISPLAY_NAME,
   KIMI_PROTOCOL_LABELS,
   getKimiProtocolUrls,
@@ -85,8 +91,9 @@ function providerKeyToResource(
     flags.websockets = (config as ProviderKeyConfig).websockets === true;
   }
   if (brand === 'claude' || brand === 'claudeApi') {
-    const cloak = (config as ProviderKeyConfig).cloak;
-    flags.cloakEnabled = Boolean(cloak?.mode?.trim());
+    const claudeConfig = config as ProviderKeyConfig;
+    flags.cloakEnabled = Boolean(claudeConfig.cloak?.mode?.trim());
+    flags.claudeCodeCliProfile = claudeConfig.fingerprintProfile === 'claude-code-cli';
   }
 
   const selector: ProviderResourceSelector = {
@@ -374,6 +381,15 @@ export function lmuAIToResource(raw: SponsorProviderRaw): ProviderResource | nul
     protocolLabels: LMU_AI_PROTOCOL_LABELS,
     resolveBaseUrl: resolveLmuAIBaseUrl,
     getProtocolUrls: getLmuAIProtocolUrls,
+  });
+}
+
+export function infistarToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('infistar', raw, {
+    displayName: INFISTAR_DISPLAY_NAME,
+    protocolLabels: INFISTAR_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveInfistarBaseUrl,
+    getProtocolUrls: getInfistarProtocolUrls,
   });
 }
 
