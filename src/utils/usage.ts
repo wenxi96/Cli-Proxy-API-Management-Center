@@ -396,6 +396,15 @@ export function normalizeUsageSourceId(
   const trimmed = raw.trim();
   if (!trimmed) return '';
 
+  // Usage payloads may already contain the canonical source-id format. Keep
+  // those ids stable so source catalog candidates can resolve them directly.
+  if (/^k:[0-9a-f]{16}$/i.test(trimmed)) {
+    return `k:${trimmed.slice(2).toLowerCase()}`;
+  }
+  if (/^m:\S+$/.test(trimmed) || /^t:\S(?:.*\S)?$/.test(trimmed)) {
+    return trimmed;
+  }
+
   const extracted = extractRawSecretFromText(trimmed);
   if (extracted) {
     return `${USAGE_SOURCE_PREFIX_KEY}${fnv1a64Hex(extracted)}`;
